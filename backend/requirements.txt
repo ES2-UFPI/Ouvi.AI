@@ -1,0 +1,8 @@
+﻿fastapi
+uvicorn[standard]
+sqlalchemy
+alembic
+psycopg2-binary
+pydantic-settings
+python-jose[cryptography]
+passlib[argon2]
