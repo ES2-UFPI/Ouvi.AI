@@ -35,7 +35,7 @@ services:
         required: false
     environment:
       # Dentro da rede do Compose os hosts são os nomes dos serviços, não localhost
-      DATABASE_URL: postgresql://ouveai:ouveai@db:5432/ouveai
+      DATABASE_URL: postgresql+psycopg2://ouveai:ouveai@db:5432/ouveai
       MINIO_ENDPOINT: http://minio:9000
     ports:
       - "8000:8000"
