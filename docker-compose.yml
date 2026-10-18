@@ -9,28 +9,41 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ouveai -d ouveai"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   minio:
-    image: bitnamilegacy/minio:latest
-    command: server /data --console-address ":9001"
+    # Imagem Bitnami (legacy): o entrypoint dela já inicia o servidor, por isso não há `command`
+    image: bitnamilegacy/minio:2025.7.23-debian-12-r3
     environment:
       MINIO_ROOT_USER: ouveai
       MINIO_ROOT_PASSWORD: ouveai123
     ports:
       - "9000:9000"
-      - "9001:9001"
     volumes:
-      - miniodata:/data
+      - miniodata:/bitnami/minio/data
 
   api:
     build: ./backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # O .env é opcional: num clone novo a API sobe com os valores abaixo
     env_file:
-      - ./backend/.env
+      - path: ./backend/.env
+        required: false
+    environment:
+      # Dentro da rede do Compose os hosts são os nomes dos serviços, não localhost
+      DATABASE_URL: postgresql://ouveai:ouveai@db:5432/ouveai
+      MINIO_ENDPOINT: http://minio:9000
     ports:
       - "8000:8000"
     depends_on:
-      - db
-      - minio
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
     volumes:
       - ./backend:/app
 
