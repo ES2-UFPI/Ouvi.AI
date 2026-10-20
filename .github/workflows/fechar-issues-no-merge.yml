@@ -1,0 +1,44 @@
+# O GitHub só fecha as issues de "Closes #N" quando o merge é na branch padrão (main).
+# Como a equipe faz merge na develop, este workflow fecha essas issues no merge da develop.
+# Com a issue fechada, o workflow "Item closed" do quadro move o card para Done.
+name: Fechar issues no merge da develop
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [develop]
+
+permissions:
+  issues: write
+  pull-requests: read
+
+jobs:
+  fechar-issues:
+    # "closed" também dispara quando o PR é fechado sem merge; só seguimos se houve merge
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fechar as issues ligadas ao PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Issues ligadas ao PR: "Closes #N" na descrição ou vínculo manual em "Development"
+          issues=$(gh pr view "$PR_NUMBER" --json closingIssuesReferences \
+            --jq '.closingIssuesReferences[].number')
+
+          if [ -z "$issues" ]; then
+            echo "O PR #$PR_NUMBER não tem issues ligadas (faltou o 'Closes #N'?)."
+            exit 0
+          fi
+
+          for issue in $issues; do
+            if [ "$(gh issue view "$issue" --json state --jq .state)" = "CLOSED" ]; then
+              echo "Issue #$issue já estava fechada."
+            else
+              gh issue close "$issue" --reason completed \
+                --comment "Fechada automaticamente pelo merge do PR #$PR_NUMBER na develop."
+              echo "Issue #$issue fechada."
+            fi
+          done
