@@ -6,8 +6,8 @@ from sqlalchemy import create_engine, pool
 from app.core.config import get_settings
 from app.core.database import Base
 
-# Importe aqui os modelos de cada módulo para o autogenerate enxergá-los, por exemplo:
-# from app.modules.users import models  # noqa: F401
+# Importe aqui os modelos de cada módulo para o autogenerate enxergá-los
+from app.modules.users import models as users_models  # noqa: F401
 
 config = context.config
 
