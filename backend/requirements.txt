@@ -1,8 +1,9 @@
-﻿fastapi
+fastapi
 uvicorn[standard]
 sqlalchemy
 alembic
 psycopg2-binary
 pydantic-settings
+pydantic[email]
 python-jose[cryptography]
 passlib[argon2]
