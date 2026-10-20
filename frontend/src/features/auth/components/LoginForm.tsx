@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { AuthLayout } from '../../../shared/components/AuthLayout'
 import { TextField } from '../../../shared/components/TextField'
 import { login } from '../api'
@@ -7,6 +7,7 @@ import { useAuthStore } from '../store'
 
 export function LoginForm() {
   const navigate = useNavigate()
+  const location = useLocation()
   const setToken = useAuthStore((s) => s.setToken)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -20,7 +21,8 @@ export function LoginForm() {
     try {
       const data = await login({ email, password })
       setToken(data.access_token)
-      navigate('/')
+      const redirectTo = (location.state as { from?: string })?.from ?? '/'
+      navigate(redirectTo, { replace: true })
     } catch {
       setError('E-mail ou senha incorretos.')
     } finally {
