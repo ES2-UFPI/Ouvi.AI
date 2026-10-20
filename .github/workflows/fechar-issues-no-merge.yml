@@ -24,9 +24,14 @@ jobs:
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          # Issues ligadas ao PR: "Closes #N" na descrição ou vínculo manual em "Development"
-          issues=$(gh pr view "$PR_NUMBER" --json closingIssuesReferences \
+          # Fora da main o GitHub não liga as issues pelo texto da descrição, só pelo vínculo
+          # manual em "Development". Por isso juntamos as duas fontes.
+          vinculadas=$(gh pr view "$PR_NUMBER" --json closingIssuesReferences \
             --jq '.closingIssuesReferences[].number')
+          na_descricao=$(gh pr view "$PR_NUMBER" --json body --jq '.body // ""' \
+            | grep -ioE '(close[sd]?|fix(e[sd])?|resolve[sd]?):? +#[0-9]+' \
+            | grep -oE '[0-9]+' || true)
+          issues=$(printf '%s\n%s\n' "$vinculadas" "$na_descricao" | grep -E '^[0-9]+$' | sort -un)
 
           if [ -z "$issues" ]; then
             echo "O PR #$PR_NUMBER não tem issues ligadas (faltou o 'Closes #N'?)."
