@@ -13,6 +13,10 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg2://ouveai:ouveai@localhost:5432/ouveai"
     jwt_secret: str = "change-me"
+    jwt_algorithm: str = "HS256"
+    # Access token curto: se vazar, vale por pouco tempo. O refresh token dura mais e só serve para renovar.
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_days: int = 7
 
     minio_endpoint: str = "http://localhost:9000"
     minio_root_user: str = "ouveai"
