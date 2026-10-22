@@ -8,6 +8,7 @@ from app.core.database import Base
 
 # Importe aqui os modelos de cada módulo para o autogenerate enxergá-los
 from app.modules.users import models as users_models  # noqa: F401
+from app.modules.filters import models as filters_models  # noqa: F401
 
 config = context.config
 
