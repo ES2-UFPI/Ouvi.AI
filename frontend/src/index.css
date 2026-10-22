@@ -17,3 +17,32 @@ body {
   font-family: var(--font-sans);
   background-color: var(--color-bg-deep);
 }
+
+input[type='range'].pt-en-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  outline: none;
+  cursor: pointer;
+}
+
+input[type='range'].pt-en-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-text-primary);
+  border: 3px solid var(--color-bg-deep);
+  box-shadow: 0 0 0 1px var(--color-border-subtle);
+}
+
+input[type='range'].pt-en-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-text-primary);
+  border: 3px solid var(--color-bg-deep);
+  box-shadow: 0 0 0 1px var(--color-border-subtle);
+}
