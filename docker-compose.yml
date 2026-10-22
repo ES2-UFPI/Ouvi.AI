@@ -10,7 +10,8 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ouveai -d ouveai"]
+      # $$ evita que o Compose troque a variável: quem a lê é o shell de dentro do container
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -39,7 +40,8 @@ services:
         required: false
     environment:
       # Dentro da rede do Compose os hosts são os nomes dos serviços, não localhost
-      DATABASE_URL: postgresql+psycopg2://ouveai:ouveai@db:5432/ouveai
+      # Usa as mesmas variáveis do banco, para API e Postgres nunca ficarem com credenciais diferentes
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       MINIO_ENDPOINT: http://minio:9000
     ports:
       - "8000:8000"

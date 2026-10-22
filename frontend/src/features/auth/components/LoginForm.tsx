@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { AuthLayout } from '../../../shared/components/AuthLayout'
@@ -8,7 +9,7 @@ import { useAuthStore } from '../store'
 export function LoginForm() {
   const navigate = useNavigate()
   const location = useLocation()
-  const setToken = useAuthStore((s) => s.setToken)
+  const setTokens = useAuthStore((s) => s.setTokens)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -20,11 +21,16 @@ export function LoginForm() {
     setLoading(true)
     try {
       const data = await login({ email, password })
-      setToken(data.access_token)
+      setTokens(data.access_token, data.refresh_token)
       const redirectTo = (location.state as { from?: string })?.from ?? '/'
       navigate(redirectTo, { replace: true })
-    } catch {
-      setError('E-mail ou senha incorretos.')
+    } catch (err) {
+      // 401 = credencial errada; qualquer outra falha (rede, API fora do ar) tem mensagem própria
+      setError(
+        axios.isAxiosError(err) && err.response?.status === 401
+          ? 'E-mail ou senha incorretos.'
+          : 'Não foi possível entrar agora. Tente novamente em instantes.',
+      )
     } finally {
       setLoading(false)
     }

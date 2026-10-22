@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
 function Waveform() {
   const heights = [18, 34, 22, 46, 28, 52, 20, 40, 30, 58, 24, 36, 44, 20, 32]

@@ -7,7 +7,7 @@ narrador.
 ## Arquitetura
 
 - **Frontend:** React + Vite + TypeScript + Tailwind (SPA)
-- **Backend:** FastAPI (monólito modular, por módulo de domínio)
+- **Backend:** FastAPI (monólito modular, em camadas Router → Service → Repository)
 - **Banco de dados:** PostgreSQL
 - **Armazenamento de arquivos:** MinIO (compatível com S3)
 
@@ -15,48 +15,65 @@ narrador.
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado e aberto
 - Git
+- [Node.js](https://nodejs.org/) 20 ou mais novo, para rodar o frontend
 
-Não é necessário instalar Python ou Node localmente para rodar o projeto —
-tudo roda dentro dos containers. Eles só são necessários se você for rodar o
-frontend ou o backend fora do Docker (ver seção "Rodando sem Docker").
+O backend, o banco e o MinIO rodam dentro do Docker, sem precisar instalar
+Python. O frontend roda na sua máquina, com `npm run dev`.
 
 ## Configuração inicial
 
 1. Clone o repositório:
 ```bash
-   git clone <url-do-repositorio>
-   cd ouve.ai
+git clone https://github.com/ES2-UFPI/Ouvi.AI.git
+cd Ouvi.AI
 ```
 
 2. Copie os arquivos de variáveis de ambiente de exemplo:
 ```bash
-   cp .env.example .env
-   cp backend/.env.example backend/.env
-   cp frontend/.env.example frontend/.env
+cp .env.example .env
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
 ```
 
-3. Abra os arquivos `.env` criados e preencha os valores (usuário/senha do
-   banco, credenciais do MinIO, `JWT_SECRET`). Para gerar um `JWT_SECRET`
-   aleatório:
+3. Os valores de exemplo já funcionam para desenvolvimento local. Se quiser
+   trocá-los, edite o `.env` da raiz (banco e MinIO) e o `backend/.env`.
+   Troque o `JWT_SECRET` do `backend/.env` por um valor aleatório:
 ```bash
-   python -c "import secrets; print(secrets.token_hex(32))"
+python -c "import secrets; print(secrets.token_hex(32))"
 ```
    Se não tiver Python instalado, qualquer string aleatória longa serve para
    desenvolvimento local.
 
 ## Rodando o projeto
 
+**1. Suba a API, o PostgreSQL e o MinIO:**
 ```bash
 docker compose up -d --build
 ```
 
 Na primeira vez, o build pode levar alguns minutos (baixando as imagens e
-instalando dependências). Depois disso, acesse:
+instalando dependências).
+
+**2. Crie as tabelas do banco (migrações):**
+```bash
+docker compose exec api alembic upgrade head
+```
+Rode de novo sempre que alguém adicionar uma migração nova.
+
+**3. Suba o frontend**, em outro terminal:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Pronto. Acesse:
 
 | Serviço | URL |
 | --- | --- |
 | Frontend | http://localhost:5173 |
-| API (docs automáticas) | http://localhost:8000/docs |
+| API (Swagger) | http://localhost:8000/docs |
+| Health check da API | http://localhost:8000/health |
 | Console do MinIO | http://localhost:9001 |
 
 Para parar os containers:
@@ -69,40 +86,56 @@ Para parar e apagar os dados do banco/MinIO (começar do zero):
 docker compose down -v
 ```
 
-## Rodando sem Docker
+## Rodando a API sem Docker
 
-Útil para debugar com mais velocidade durante o desenvolvimento.
+Útil para debugar com mais velocidade. O PostgreSQL ainda precisa estar de pé
+(`docker compose up -d db`).
 
-**Backend:**
 ```bash
 cd backend
 python -m venv venv
 # Windows: .\venv\Scripts\Activate.ps1
 # Linux/macOS: source venv/bin/activate
 pip install -r requirements.txt
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
-> Atenção: fora do Docker, troque no seu `backend/.env` local os hosts `db` e
-> `minio` por `localhost` (eles só resolvem dentro da rede do Docker).
-
-**Frontend:**
-```bash
-cd frontend
-npm install
-npm run dev
-```
+> Fora do Docker a API usa o `DATABASE_URL` e o `MINIO_ENDPOINT` do
+> `backend/.env`, que apontam para `localhost`. Dentro do Docker, o
+> `docker-compose.yml` troca esses hosts por `db` e `minio` automaticamente.
 
 ## Problemas comuns
 
-- **`pull access denied for minio/minio`**: a imagem oficial do MinIO foi
-  removida do Docker Hub em setembro de 2026. O projeto já usa
-  `bitnamilegacy/minio` como alternativa — se esse erro aparecer, confirme
-  que você puxou a versão mais recente do `docker-compose.yml`.
+- **`pull access denied for minio/minio`**: a imagem oficial do MinIO não está
+  mais disponível no Docker Hub. O projeto usa `bitnamilegacy/minio` como
+  alternativa — se esse erro aparecer, confirme que você tem a versão mais
+  recente do `docker-compose.yml`.
 - **MinIO falha com `file access denied`**: geralmente acontece quando o
   volume de dados já existia de uma versão anterior. Rode
   `docker compose down -v` para recriar os volumes do zero.
-- **Erro de conexão com o banco**: confirme que o `DATABASE_URL` no
-  `backend/.env` usa `db` como host (não `localhost`) quando rodando via
-  Docker.
+- **A API não conecta ao banco depois de trocar usuário ou senha no `.env`**:
+  o Postgres só lê essas variáveis na primeira criação do volume. Rode
+  `docker compose down -v` e suba de novo.
+- **O frontend mostra erro de rede ao entrar ou cadastrar**: confirme que a
+  API está de pé (`http://localhost:8000/health`) e que a porta do frontend
+  está em `CORS_ORIGINS` no `backend/.env` (padrão: `http://localhost:5173`).
 
 ## Estrutura do repositório
+
+```
+.
+├── backend/              API FastAPI
+│   ├── app/
+│   │   ├── core/         configurações, banco de dados e segurança (JWT, hash)
+│   │   ├── integrations/ adaptadores de serviços externos (TTS, NLP, S3)
+│   │   └── modules/      módulos de negócio: auth, users, filters, stories, health
+│   ├── alembic/          migrações do banco
+│   └── Dockerfile
+├── frontend/             SPA React (código organizado por feature)
+├── docker-compose.yml    API, PostgreSQL e MinIO
+└── .env.example          variáveis de ambiente de exemplo
+```
+
+Cada módulo do backend segue as camadas `router.py` (HTTP), `service.py`
+(regras de negócio), `repository.py` (acesso a dados) e `schemas.py`
+(entrada e saída da API).

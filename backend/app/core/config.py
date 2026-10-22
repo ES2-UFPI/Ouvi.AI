@@ -18,11 +18,18 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
 
+    # Origens do front-end autorizadas a chamar a API, separadas por vírgula
+    cors_origins: str = "http://localhost:5173"
+
     minio_endpoint: str = "http://localhost:9000"
     minio_root_user: str = "ouveai"
     minio_root_password: str = "ouveai123"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @field_validator("database_url")
     @classmethod
