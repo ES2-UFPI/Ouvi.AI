@@ -1,9 +1,12 @@
 """Schemas Pydantic de entrada e saída da API deste módulo."""
-from pydantic import BaseModel, EmailStr, Field
+from typing import Annotated
+
+from pydantic import BaseModel, EmailStr, Field, StringConstraints
 
 
 class RegisterRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=100)
+    # O strip acontece antes de checar o tamanho: um nome só com espaços vira vazio e é recusado
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
     email: EmailStr
     # max_length evita enviar senhas gigantes só para pesar o custo do hash
     password: str = Field(min_length=8, max_length=128)

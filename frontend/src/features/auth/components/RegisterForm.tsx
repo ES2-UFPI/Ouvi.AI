@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AuthLayout } from '../../../shared/components/AuthLayout'
@@ -19,8 +20,15 @@ export function RegisterForm() {
     try {
       await register({ name, email, password })
       navigate('/login')
-    } catch {
-      setError('Não foi possível criar sua conta. Verifique os dados e tente novamente.')
+    } catch (err) {
+      const status = axios.isAxiosError(err) ? err.response?.status : undefined
+      if (status === 409) {
+        setError('Este e-mail já está cadastrado. Tente entrar na sua conta.')
+      } else if (status === 422) {
+        setError('Confira os dados: use um e-mail válido e uma senha com no mínimo 8 caracteres.')
+      } else {
+        setError('Não foi possível criar sua conta agora. Tente novamente em instantes.')
+      }
     } finally {
       setLoading(false)
     }
