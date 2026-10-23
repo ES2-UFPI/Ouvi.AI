@@ -3,6 +3,7 @@ import { LoginForm } from '../features/auth/components/LoginForm'
 import { RegisterForm } from '../features/auth/components/RegisterForm'
 import { ProtectedRoute } from '../shared/components/ProtectedRoute'
 import { AudioFilterPanel } from '../features/filters/components/AudioFilterPanel'
+import { AudioPlayer } from '../features/player/components/AudioPlayer'
 
 export function AppRoutes() {
   return (
@@ -11,10 +12,28 @@ export function AppRoutes() {
       <Route path="/cadastro" element={<RegisterForm />} />
 
       <Route element={<ProtectedRoute />}>
-        <Route path="/" element={<div>Dashboard (em construção)
-          <Route path="/filter" element={<div className="p-8 max-w-md"><AudioFilterPanel /></div>} />
+        <Route path="/" element={<div>Dashboard (em construção)</div>} />
 
-        </div>} />
+        <Route
+          path="/filter"
+          element={
+            <div className="p-8 max-w-md">
+              <AudioFilterPanel />
+            </div>
+          }
+        />
+
+        <Route
+          path="/player"
+          element={
+            <div className="p-8 max-w-md">
+              <AudioPlayer
+                src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+                title="Teste do player"
+              />
+            </div>
+          }
+        />
       </Route>
     </Routes>
   )
