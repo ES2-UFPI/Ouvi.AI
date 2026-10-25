@@ -68,7 +68,15 @@ Pode rodar quantas vezes quiser: não duplica nada. Opções: `--dry-run` (mostr
 `--check` (só valida os arquivos JSON, sem banco) e `--prune` (remove do banco frases além do fim de cada JSON).
 Os textos e a origem de cada um estão em `backend/app/modules/stories/seed/`.
 
-**4. Suba o frontend**, em outro terminal:
+**4. Anote as histórias** (acha os phrasal verbs de cada frase e o equivalente em português):
+```bash
+docker compose exec api python -m app.modules.stories.annotate
+```
+Pode rodar quantas vezes quiser: as anotações antigas são substituídas, sem duplicar nada. Opções: `--story-id N`
+(anota só uma história) e `--dry-run` (mostra o que faria, sem gravar). Ao final o comando mostra as contagens e
+lista os trechos que ficaram sem equivalente em português.
+
+**5. Suba o frontend**, em outro terminal:
 ```bash
 cd frontend
 npm install
@@ -121,12 +129,35 @@ subida da API não fica mais lenta.
 > O `requirements.txt` fixa `preshed==3.0.9` de propósito: a versão 3.0.14 impede o spaCy de carregar o modelo
 > (`OverflowError`). Antes de atualizar o spaCy ou o `preshed`, rode os testes.
 
+## Alinhamento português/inglês
+
+Para trocar um trecho de idioma no áudio, é preciso saber onde está o equivalente em português. O `TextAnnotator`
+(`backend/app/modules/stories/annotator.py`) roda o detector em cada frase em inglês e procura o equivalente na frase
+em português com um dicionário curado: `backend/app/modules/stories/nlp/data/pt_equivalents.json`.
+
+Cada entrada liga um phrasal verb às formas dele em português:
+
+```json
+"give up": ["desistir", "desistiu", "desistiram", "desistindo"],
+"leave behind": ["deixou ... para trás", "deixaram ... para trás"]
+```
+
+- A busca ignora maiúsculas e acentos, respeita limites de palavra e, se a forma aparece mais de uma vez, escolhe a
+  ocorrência mais próxima da posição do trecho em inglês.
+- `...` vale de 1 a 4 palavras no meio (para phrasal verbs separáveis, como *deixou **a tartaruga** para trás*).
+- A forma em português deve cobrir os mesmos pedaços que o trecho em inglês. O detector acha *chase me away*, sem o
+  sujeito, então a forma é `me expulsem` e não `eles me expulsem`.
+- Trecho sem entrada no dicionário não se perde: fica gravado com os campos `pt_*` nulos e aparece no relatório do
+  comando de anotação. Acrescente as formas e rode o comando de novo.
+
 ## Testes do backend
 
 ```bash
 docker compose exec api pip install -r requirements-dev.txt
 docker compose exec api python -m pytest
 ```
+Os testes que usam o banco rodam numa transação que é desfeita no final: não alteram os dados do seu ambiente.
+Eles precisam do Postgres no ar e migrado (`alembic upgrade head`); sem isso, são pulados.
 O `pip install` precisa ser repetido se o container for recriado (`docker compose up --build`).
 
 ## Rodando a API sem Docker
