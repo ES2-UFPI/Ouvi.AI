@@ -94,6 +94,33 @@ Para parar e apagar os dados do banco/MinIO (começar do zero):
 docker compose down -v
 ```
 
+## Detector de phrasal verbs (NLP)
+
+O backend usa o [spaCy](https://spacy.io/) com o modelo `en_core_web_sm` para achar phrasal verbs em textos em
+inglês (código em `backend/app/modules/stories/nlp/`). Para experimentar:
+
+```bash
+docker compose exec api python -c "from app.modules.stories.nlp.factory import DetectorFactory; print(DetectorFactory.create('phrasal_verb').detect('She turned the light off.'))"
+```
+
+Os phrasal verbs aceitos ficam em `nlp/data/phrasal_verbs.txt`, um por linha. Para aceitar mais um, basta
+acrescentar uma linha.
+
+**Impacto no build da imagem da API** (medido sem cache do Docker, em Windows com Docker Desktop; os números
+variam conforme a máquina e a internet):
+
+| | Tempo do build | Tamanho da imagem |
+|---|---|---|
+| Antes (sem spaCy) | cerca de 20 s | 332 MB |
+| Depois (com spaCy e o modelo) | cerca de 46 s | 749 MB |
+
+O modelo é instalado pelo `requirements.txt`. Com o cache do Docker, rebuilds em que o `requirements.txt` não mudou
+continuam rápidos. O modelo é carregado uma única vez por processo, na primeira vez que um detector é criado, então a
+subida da API não fica mais lenta.
+
+> O `requirements.txt` fixa `preshed==3.0.9` de propósito: a versão 3.0.14 impede o spaCy de carregar o modelo
+> (`OverflowError`). Antes de atualizar o spaCy ou o `preshed`, rode os testes.
+
 ## Testes do backend
 
 ```bash

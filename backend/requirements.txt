@@ -7,3 +7,7 @@ pydantic-settings
 pydantic[email]
 python-jose[cryptography]
 passlib[argon2]
+spacy>=3.8,<3.9
+# preshed 3.0.14 quebra o carregamento do modelo (OverflowError no tokenizador); a 3.0.9 foi testada e funciona
+preshed==3.0.9
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
