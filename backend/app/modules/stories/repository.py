@@ -23,6 +23,19 @@ class StoryRepository:
     def get_by_id(self, story_id: int) -> Story | None:
         return self.db.get(Story, story_id)
 
+    def get_by_title(self, title: str) -> Story | None:
+        return self.db.scalar(select(Story).where(Story.title == title))
+
+    def create(
+        self, title: str, description: str | None, language: str, commit: bool = True
+    ) -> Story:
+        story = Story(title=title, description=description, language=language)
+        self.db.add(story)
+        self.db.commit() if commit else self.db.flush()
+        if commit:
+            self.db.refresh(story)
+        return story
+
 
 class SegmentRepository:
     """Os métodos de escrita aceitam `commit=False` para o Service juntar várias
@@ -75,6 +88,28 @@ class SegmentRepository:
         if commit:
             self.db.refresh(segment)
         return segment
+
+
+    def update_texts(
+        self, segment: Segment, text_en: str, text_pt: str, commit: bool = True
+    ) -> Segment:
+        segment.text_en = text_en
+        segment.text_pt = text_pt
+        self.db.commit() if commit else self.db.flush()
+        return segment
+
+    def delete_from_position(
+        self, story_id: int, start_position: int, commit: bool = True
+    ) -> int:
+        """Apaga as frases da posição indicada em diante (as anotações saem junto, por cascata no banco)."""
+        result = self.db.execute(
+            delete(Segment).where(
+                Segment.story_id == story_id, Segment.position >= start_position
+            )
+        )
+        if commit:
+            self.db.commit()
+        return result.rowcount
 
 
 class AnnotationRepository:

@@ -60,7 +60,15 @@ docker compose exec api alembic upgrade head
 ```
 Rode de novo sempre que alguém adicionar uma migração nova.
 
-**3. Suba o frontend**, em outro terminal:
+**3. Carregue as histórias de exemplo** (três fábulas bilíngues, divididas em frases):
+```bash
+docker compose exec api python -m app.modules.stories.seed
+```
+Pode rodar quantas vezes quiser: não duplica nada. Opções: `--dry-run` (mostra o que faria, sem gravar),
+`--check` (só valida os arquivos JSON, sem banco) e `--prune` (remove do banco frases além do fim de cada JSON).
+Os textos e a origem de cada um estão em `backend/app/modules/stories/seed/`.
+
+**4. Suba o frontend**, em outro terminal:
 ```bash
 cd frontend
 npm install
@@ -85,6 +93,14 @@ Para parar e apagar os dados do banco/MinIO (começar do zero):
 ```bash
 docker compose down -v
 ```
+
+## Testes do backend
+
+```bash
+docker compose exec api pip install -r requirements-dev.txt
+docker compose exec api python -m pytest
+```
+O `pip install` precisa ser repetido se o container for recriado (`docker compose up --build`).
 
 ## Rodando a API sem Docker
 

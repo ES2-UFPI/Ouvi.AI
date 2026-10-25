@@ -1,0 +1,130 @@
+{
+  "title": "A Raposa e as Uvas",
+  "language": "en",
+  "description": "Uma raposa faminta tenta alcançar um cacho de uvas e descobre como a vaidade pode enganar.",
+  "source": "Fábula de Esopo (domínio público). Recontagem original em inglês e em português.",
+  "segments": [
+    {
+      "en": "One hot afternoon, a hungry fox was walking through the countryside.",
+      "pt": "Numa tarde quente, uma raposa faminta caminhava pelo campo.",
+      "phrasal_verbs": []
+    },
+    {
+      "en": "She had not eaten for two days, so she set out to find some food.",
+      "pt": "Fazia dois dias que ela não comia, então partiu em busca de comida.",
+      "phrasal_verbs": [
+        {
+          "lemma": "set out",
+          "en": "set out",
+          "pt": "partiu",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "Suddenly she looked up and saw a bunch of ripe grapes hanging from a high vine.",
+      "pt": "De repente, levantou os olhos e viu um cacho de uvas maduras pendurado numa parreira alta.",
+      "phrasal_verbs": [
+        {
+          "lemma": "look up",
+          "en": "looked up",
+          "pt": "levantou os olhos",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "The grapes looked so sweet that her mouth began to water.",
+      "pt": "As uvas pareciam tão doces que ela ficou com água na boca.",
+      "phrasal_verbs": []
+    },
+    {
+      "en": "She jumped up, but the grapes were too high to reach.",
+      "pt": "Ela pulou, mas as uvas estavam altas demais para alcançar.",
+      "phrasal_verbs": [
+        {
+          "lemma": "jump up",
+          "en": "jumped up",
+          "pt": "pulou",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "She tried again and again, but she could not bring them down.",
+      "pt": "Tentou várias vezes, mas não conseguiu fazê-las cair.",
+      "phrasal_verbs": [
+        {
+          "lemma": "bring down",
+          "en": "bring them down",
+          "pt": "fazê-las cair",
+          "separable": true
+        }
+      ]
+    },
+    {
+      "en": "She even tried to knock them down with a long stick.",
+      "pt": "Até tentou derrubá-las com um galho comprido.",
+      "phrasal_verbs": [
+        {
+          "lemma": "knock down",
+          "en": "knock them down",
+          "pt": "derrubá-las",
+          "separable": true
+        }
+      ]
+    },
+    {
+      "en": "At last she sat down under the vine, tired and angry.",
+      "pt": "Por fim, sentou-se debaixo da parreira, cansada e furiosa.",
+      "phrasal_verbs": [
+        {
+          "lemma": "sit down",
+          "en": "sat down",
+          "pt": "sentou-se",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "A little bird watched her give up and flew away.",
+      "pt": "Um passarinho viu a raposa desistir e voou para longe.",
+      "phrasal_verbs": [
+        {
+          "lemma": "give up",
+          "en": "give up",
+          "pt": "desistir",
+          "separable": false
+        },
+        {
+          "lemma": "fly away",
+          "en": "flew away",
+          "pt": "voou para longe",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "\"Those grapes are probably sour,\" she said, and she walked away with her nose in the air.",
+      "pt": "\"Aquelas uvas devem estar azedas\", disse ela, e se afastou de nariz empinado.",
+      "phrasal_verbs": [
+        {
+          "lemma": "walk away",
+          "en": "walked away",
+          "pt": "se afastou",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "It is easy to say you do not want something when you cannot get it.",
+      "pt": "É fácil dizer que não se quer algo quando não se consegue tê-lo.",
+      "phrasal_verbs": []
+    },
+    {
+      "en": "And so the fox went home, hungry but proud.",
+      "pt": "E assim a raposa voltou para casa, faminta, mas orgulhosa.",
+      "phrasal_verbs": []
+    }
+  ]
+}

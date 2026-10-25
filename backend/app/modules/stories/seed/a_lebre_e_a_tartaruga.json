@@ -1,0 +1,152 @@
+{
+  "title": "A Lebre e a Tartaruga",
+  "language": "en",
+  "description": "Uma corrida entre a lebre veloz e a tartaruga persistente mostra o valor da constância.",
+  "source": "Fábula de Esopo (domínio público). Recontagem original em inglês e em português.",
+  "segments": [
+    {
+      "en": "A hare was always bragging about how fast he could run.",
+      "pt": "Uma lebre vivia se gabando de como corria rápido.",
+      "phrasal_verbs": []
+    },
+    {
+      "en": "One day, a tortoise got tired of hearing him show off.",
+      "pt": "Um dia, uma tartaruga se cansou de ouvi-lo se exibir.",
+      "phrasal_verbs": [
+        {
+          "lemma": "show off",
+          "en": "show off",
+          "pt": "se exibir",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "\"Let us have a race,\" said the tortoise, \"and we will see who is faster.\"",
+      "pt": "\"Vamos apostar uma corrida\", disse a tartaruga, \"e veremos quem é mais rápido\".",
+      "phrasal_verbs": []
+    },
+    {
+      "en": "The hare laughed so hard that he almost fell over.",
+      "pt": "A lebre riu tanto que quase caiu no chão.",
+      "phrasal_verbs": [
+        {
+          "lemma": "fall over",
+          "en": "fell over",
+          "pt": "caiu no chão",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "All the animals came out to watch, and the owl lined them up along the road.",
+      "pt": "Todos os bichos saíram para assistir, e a coruja os enfileirou ao longo da estrada.",
+      "phrasal_verbs": [
+        {
+          "lemma": "come out",
+          "en": "came out",
+          "pt": "saíram",
+          "separable": false
+        },
+        {
+          "lemma": "line up",
+          "en": "lined them up",
+          "pt": "os enfileirou",
+          "separable": true
+        }
+      ]
+    },
+    {
+      "en": "When the owl gave the signal, the two runners took off.",
+      "pt": "Quando a coruja deu o sinal, os dois corredores dispararam.",
+      "phrasal_verbs": [
+        {
+          "lemma": "take off",
+          "en": "took off",
+          "pt": "dispararam",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "The hare ran so fast that he soon left the tortoise behind.",
+      "pt": "A lebre correu tão rápido que logo deixou a tartaruga para trás.",
+      "phrasal_verbs": [
+        {
+          "lemma": "leave behind",
+          "en": "left the tortoise behind",
+          "pt": "deixou a tartaruga para trás",
+          "separable": true
+        }
+      ]
+    },
+    {
+      "en": "\"I have plenty of time,\" he thought, and he lay down under a tree.",
+      "pt": "\"Tenho tempo de sobra\", pensou, e se deitou debaixo de uma árvore.",
+      "phrasal_verbs": [
+        {
+          "lemma": "lie down",
+          "en": "lay down",
+          "pt": "se deitou",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "Soon he dozed off in the warm shade.",
+      "pt": "Logo ele pegou no sono na sombra morna.",
+      "phrasal_verbs": [
+        {
+          "lemma": "doze off",
+          "en": "dozed off",
+          "pt": "pegou no sono",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "Meanwhile, the tortoise kept walking, slowly and steadily.",
+      "pt": "Enquanto isso, a tartaruga continuou andando, devagar e sempre.",
+      "phrasal_verbs": []
+    },
+    {
+      "en": "When the hare woke up, he saw the tortoise near the finish line.",
+      "pt": "Quando a lebre acordou, viu a tartaruga perto da linha de chegada.",
+      "phrasal_verbs": [
+        {
+          "lemma": "wake up",
+          "en": "woke up",
+          "pt": "acordou",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "He ran as fast as he could, but it was too late.",
+      "pt": "Correu o mais rápido que pôde, mas já era tarde demais.",
+      "phrasal_verbs": []
+    },
+    {
+      "en": "The tortoise crossed the line first while the crowd cheered her on.",
+      "pt": "A tartaruga cruzou a linha primeiro enquanto a multidão a incentivava.",
+      "phrasal_verbs": [
+        {
+          "lemma": "cheer on",
+          "en": "cheered her on",
+          "pt": "a incentivava",
+          "separable": true
+        }
+      ]
+    },
+    {
+      "en": "From that day on, the hare never boasted again.",
+      "pt": "Daquele dia em diante, a lebre nunca mais se gabou.",
+      "phrasal_verbs": []
+    },
+    {
+      "en": "Slow and steady wins the race.",
+      "pt": "Devagar e sempre se chega longe.",
+      "phrasal_verbs": []
+    }
+  ]
+}
