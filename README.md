@@ -150,6 +150,17 @@ Cada entrada liga um phrasal verb às formas dele em português:
 - Trecho sem entrada no dicionário não se perde: fica gravado com os campos `pt_*` nulos e aparece no relatório do
   comando de anotação. Acrescente as formas e rode o comando de novo.
 
+## Trechos candidatos pela API
+
+`GET /stories/{id}/segments` (exige token) devolve as frases da história em ordem de `position`, cada uma com suas anotações em ordem de `en_start`.
+
+| Parâmetro | Efeito |
+|---|---|
+| `kind=phrasal_verb` | só anotações desse tipo (outro valor responde `422`) |
+| `aligned_only=true` | só anotações que já têm equivalente em português |
+
+Erros: `404` história inexistente, `401` sem token, `422` filtro inválido. Sem paginação (as histórias têm algumas dezenas de frases). O número de consultas ao banco é fixo (história, frases e anotações), não importa quantas frases existam. Outros módulos devem usar `StoryService.get_segments`, nunca o repositório.
+
 ## Testes do backend
 
 ```bash
