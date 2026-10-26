@@ -2,6 +2,8 @@ import { useFilterStore } from '../store'
 import { useEffect, useRef } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { getFilterPreference, saveFilterPreference } from '../api'
+import { Headphones } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 const PRESETS = [
   { label: 'Só PT', value: 100 },
@@ -11,7 +13,11 @@ const PRESETS = [
   { label: 'Só EN', value: 0 },
 ]
 
-export function AudioFilterPanel() {
+interface AudioFilterPanelProps {
+  materialId?: string
+}
+
+export function AudioFilterPanel({ materialId }: AudioFilterPanelProps) {
   const ptRatio = useFilterStore((s) => s.ptRatio)
   const setPtRatio = useFilterStore((s) => s.setPtRatio)
   const enRatio = 100 - ptRatio
@@ -110,8 +116,18 @@ export function AudioFilterPanel() {
           </button>
         ))}
       </div>
+
+      {materialId && (
+        <Link
+          to={`/player/${materialId}`}
+          className="mt-5 w-full flex items-center justify-center gap-2 rounded-lg py-2.5 font-medium text-bg-deep transition-opacity hover:opacity-90"
+          style={{ backgroundColor: 'var(--color-accent-en)' }}
+        >
+          <Headphones size={18} />
+          Ouvir
+        </Link>
+      )}
     </div>
   )
 }
-  
-  
+
