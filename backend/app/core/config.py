@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     # Origens do front-end autorizadas a chamar a API, separadas por vírgula
     cors_origins: str = "http://localhost:5173"
 
+    # Segredo das URLs assinadas do áudio (HMAC). Separado do JWT: trocar um não invalida o outro
+    audio_signing_secret: str = "change-me-audio"
+    # Validade da URL do player. Curta, mas maior que uma história: o navegador continua pedindo
+    # trechos com a mesma URL enquanto o usuário pula pelo áudio
+    audio_url_ttl_seconds: int = 3600
+
     # "development" libera comodidades de dev, como criar o bucket sozinho na subida da API
     app_env: str = "development"
 

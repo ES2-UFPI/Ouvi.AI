@@ -185,6 +185,36 @@ docker compose exec api python -m scripts.upload_sample_audio                  #
 docker compose exec api python -m scripts.upload_sample_audio caminho/do.mp3   # envia um arquivo seu
 ```
 
+## Streaming de áudio
+
+A tag `<audio>` do navegador não envia o header `Authorization`, então o áudio é entregue por uma URL
+assinada (HMAC-SHA256) de curta duração, em duas etapas:
+
+1. O front chama `GET /audio/url?key=<chave>` **com o token** e recebe `{"url": ..., "expires_at": ...}`.
+2. O front põe essa `url` no `src` do `<audio>`. Ela aponta para `GET /audio/stream`, que **não exige token**:
+   a assinatura basta.
+
+`GET /audio/stream` suporta o header `Range`, para o player pular para o meio sem baixar o arquivo todo:
+
+| Requisição | Resposta |
+|---|---|
+| sem `Range` | `200` com o arquivo inteiro |
+| `Range: bytes=0-99`, `bytes=500-` ou `bytes=-200` | `206` com o trecho e o `Content-Range` |
+| faixa inválida ou fora do arquivo | `416` com `Content-Range: bytes */<tamanho>` |
+| assinatura adulterada ou URL expirada | `403` |
+| chave inexistente | `404` |
+
+| Variável (`backend/.env`) | Para que serve |
+|---|---|
+| `AUDIO_SIGNING_SECRET` | segredo das assinaturas; use um valor aleatório, diferente do `JWT_SECRET` |
+| `AUDIO_URL_TTL_SECONDS` | validade da URL, em segundos (padrão `3600`) |
+
+Para testar com `curl`, gere uma URL em `GET /audio/url` (pelo `/docs`, depois do **Authorize**) e rode:
+
+```bash
+curl -s -o /dev/null -D - -H "Range: bytes=0-99" "<url>"
+```
+
 ## Testes do backend
 
 ```bash
@@ -238,7 +268,7 @@ uvicorn app.main:app --reload
 │   ├── app/
 │   │   ├── core/         configurações, banco de dados e segurança (JWT, hash)
 │   │   ├── integrations/ adaptadores de serviços externos (TTS, NLP, S3)
-│   │   └── modules/      módulos de negócio: auth, users, filters, stories, health
+│   │   └── modules/      módulos de negócio: auth, users, filters, stories, audio, health
 │   ├── alembic/          migrações do banco
 │   ├── scripts/          scripts de apoio (ex.: enviar áudio de exemplo ao MinIO)
 │   └── Dockerfile
