@@ -6,7 +6,7 @@ export function ProtectedRoute() {
   const location = useLocation()
 
   if (!token) {
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />
+  return <Navigate to="/login" state={{ from: location.pathname }} replace />
   }
 
   return <Outlet />

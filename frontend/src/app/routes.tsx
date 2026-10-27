@@ -4,10 +4,13 @@ import { RegisterForm } from '../features/auth/components/RegisterForm'
 import { ProtectedRoute } from '../shared/components/ProtectedRoute'
 import { AudioFilterPanel } from '../features/filters/components/AudioFilterPanel'
 import { PlayerPage } from '../features/player/components/PlayerPage'
+import { DevNav } from '../test/DevNav'
 
 export function AppRoutes() {
   return (
     <Routes>
+      <Route path="/dev" element={<DevNav />} />
+
       <Route path="/login" element={<LoginForm />} />
       <Route path="/cadastro" element={<RegisterForm />} />
 
