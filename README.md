@@ -161,6 +161,30 @@ Cada entrada liga um phrasal verb às formas dele em português:
 
 Erros: `404` história inexistente, `401` sem token, `422` filtro inválido. Sem paginação (as histórias têm algumas dezenas de frases). O número de consultas ao banco é fixo (história, frases e anotações), não importa quantas frases existam. Outros módulos devem usar `StoryService.get_segments`, nunca o repositório.
 
+## Armazenamento de arquivos (S3)
+
+Áudios e outros arquivos ficam num armazenamento de objetos compatível com S3: MinIO em desenvolvimento,
+Cloudflare R2 em produção. O código usa sempre a interface `ObjectStorage` (`app/integrations/storage`),
+recebida pela dependência `Depends(get_storage)`. Nenhum outro módulo importa o `boto3`.
+
+| Variável (`backend/.env`) | Para que serve |
+|---|---|
+| `STORAGE_BACKEND` | `s3` (MinIO/R2) ou `memory` (dicionário em memória, para testes) |
+| `STORAGE_ENDPOINT` | endpoint que a API usa (`http://minio:9000` dentro do Docker) |
+| `STORAGE_PUBLIC_ENDPOINT` | endpoint que o navegador usa nas URLs assinadas (`http://localhost:9000` em dev) |
+| `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` | credenciais; no Docker vêm do `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` da raiz |
+| `STORAGE_BUCKET` | nome do bucket (padrão `ouveai-audio`) |
+| `STORAGE_REGION` | região; o MinIO aceita qualquer uma, o R2 usa `auto` |
+| `APP_ENV` | com `development`, a API cria o bucket sozinha na subida |
+
+Para testar o player antes de existir TTS, envie um áudio de exemplo. O script imprime a chave gravada e
+uma URL assinada que abre direto no navegador:
+
+```bash
+docker compose exec api python -m scripts.upload_sample_audio                  # gera um tom de 30 s
+docker compose exec api python -m scripts.upload_sample_audio caminho/do.mp3   # envia um arquivo seu
+```
+
 ## Testes do backend
 
 ```bash
@@ -170,6 +194,7 @@ docker compose exec api python -m pytest
 Os testes que usam o banco rodam numa transação que é desfeita no final: não alteram os dados do seu ambiente.
 Eles precisam do Postgres no ar e migrado (`alembic upgrade head`); sem isso, são pulados.
 O `pip install` precisa ser repetido se o container for recriado (`docker compose up --build`).
+Os testes de armazenamento rodam na `InMemoryStorage` sempre e no MinIO quando ele está no ar; sem ele, a parte S3 é pulada.
 
 ## Rodando a API sem Docker
 
@@ -185,7 +210,7 @@ pip install -r requirements.txt
 alembic upgrade head
 uvicorn app.main:app --reload
 ```
-> Fora do Docker a API usa o `DATABASE_URL` e o `MINIO_ENDPOINT` do
+> Fora do Docker a API usa o `DATABASE_URL` e o `STORAGE_ENDPOINT` do
 > `backend/.env`, que apontam para `localhost`. Dentro do Docker, o
 > `docker-compose.yml` troca esses hosts por `db` e `minio` automaticamente.
 
@@ -215,6 +240,7 @@ uvicorn app.main:app --reload
 │   │   ├── integrations/ adaptadores de serviços externos (TTS, NLP, S3)
 │   │   └── modules/      módulos de negócio: auth, users, filters, stories, health
 │   ├── alembic/          migrações do banco
+│   ├── scripts/          scripts de apoio (ex.: enviar áudio de exemplo ao MinIO)
 │   └── Dockerfile
 ├── frontend/             SPA React (código organizado por feature)
 ├── docker-compose.yml    API, PostgreSQL e MinIO
