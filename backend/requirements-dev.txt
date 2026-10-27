@@ -1,0 +1,3 @@
+-r requirements.txt
+pytest
+httpx  # exigido pelo TestClient do FastAPI

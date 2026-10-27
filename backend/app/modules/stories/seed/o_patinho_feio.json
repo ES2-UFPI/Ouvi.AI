@@ -1,0 +1,166 @@
+{
+  "title": "O Patinho Feio",
+  "language": "en",
+  "description": "Um patinho rejeitado pelos outros bichos encontra o seu lugar ao se descobrir quem é.",
+  "source": "Conto de Hans Christian Andersen (domínio público). Recontagem original em inglês e em português.",
+  "segments": [
+    {
+      "en": "Spring had come to the farm, and a mother duck was waiting for her eggs to hatch.",
+      "pt": "A primavera chegou à fazenda, e uma mãe pata esperava os ovos chocarem.",
+      "phrasal_verbs": []
+    },
+    {
+      "en": "One by one the eggs cracked open, and the little ducklings came out.",
+      "pt": "Um a um, os ovos se abriram, e os patinhos saíram.",
+      "phrasal_verbs": [
+        {
+          "lemma": "crack open",
+          "en": "cracked open",
+          "pt": "se abriram",
+          "separable": false
+        },
+        {
+          "lemma": "come out",
+          "en": "came out",
+          "pt": "saíram",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "The last egg was bigger than the others, and it took a long time to hatch.",
+      "pt": "O último ovo era maior que os outros e demorou muito para chocar.",
+      "phrasal_verbs": []
+    },
+    {
+      "en": "The duckling that finally hatched was big, gray and clumsy.",
+      "pt": "O patinho que finalmente nasceu era grande, cinzento e desajeitado.",
+      "phrasal_verbs": []
+    },
+    {
+      "en": "The other animals laughed at him and pushed him around.",
+      "pt": "Os outros bichos riam dele e o empurravam de um lado para o outro.",
+      "phrasal_verbs": [
+        {
+          "lemma": "push around",
+          "en": "pushed him around",
+          "pt": "o empurravam de um lado para o outro",
+          "separable": true
+        }
+      ]
+    },
+    {
+      "en": "Sad and alone, the duckling ran away from the farm.",
+      "pt": "Triste e sozinho, o patinho fugiu da fazenda.",
+      "phrasal_verbs": [
+        {
+          "lemma": "run away",
+          "en": "ran away",
+          "pt": "fugiu",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "He hid in the reeds and waited for the storm to blow over.",
+      "pt": "Ele se escondeu entre os juncos e esperou a tempestade passar.",
+      "phrasal_verbs": [
+        {
+          "lemma": "blow over",
+          "en": "blow over",
+          "pt": "passar",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "At last, a kind old man found him and took him in.",
+      "pt": "Por fim, um velhinho bondoso o encontrou e o acolheu.",
+      "phrasal_verbs": [
+        {
+          "lemma": "take in",
+          "en": "took him in",
+          "pt": "o acolheu",
+          "separable": true
+        }
+      ]
+    },
+    {
+      "en": "But the cat and the hen were unkind to him, so he set off again.",
+      "pt": "Mas o gato e a galinha foram maus com ele, e ele partiu de novo.",
+      "phrasal_verbs": [
+        {
+          "lemma": "set off",
+          "en": "set off",
+          "pt": "partiu",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "The winter was long and cold, but the duckling held on until spring.",
+      "pt": "O inverno foi longo e frio, mas o patinho resistiu até a primavera.",
+      "phrasal_verbs": [
+        {
+          "lemma": "hold on",
+          "en": "held on",
+          "pt": "resistiu",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "When spring came, he saw three beautiful white swans on a lake.",
+      "pt": "Quando a primavera chegou, ele viu três lindos cisnes brancos num lago.",
+      "phrasal_verbs": []
+    },
+    {
+      "en": "\"I will swim to them, even if they chase me away,\" he thought.",
+      "pt": "\"Vou nadar até eles, mesmo que eles me expulsem\", pensou.",
+      "phrasal_verbs": [
+        {
+          "lemma": "chase away",
+          "en": "they chase me away",
+          "pt": "eles me expulsem",
+          "separable": true
+        }
+      ]
+    },
+    {
+      "en": "But when he bent down to drink, he saw his own reflection in the water.",
+      "pt": "Mas quando se inclinou para beber, viu o próprio reflexo na água.",
+      "phrasal_verbs": [
+        {
+          "lemma": "bend down",
+          "en": "bent down",
+          "pt": "se inclinou",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "He was not an ugly duckling anymore; he had grown up into a beautiful swan.",
+      "pt": "Ele não era mais um patinho feio; havia crescido e agora era um belo cisne.",
+      "phrasal_verbs": [
+        {
+          "lemma": "grow up",
+          "en": "had grown up",
+          "pt": "havia crescido",
+          "separable": false
+        }
+      ]
+    },
+    {
+      "en": "Finally, he found out that he had been a swan all along.",
+      "pt": "Por fim, ele descobriu que sempre fora um cisne.",
+      "phrasal_verbs": [
+        {
+          "lemma": "find out",
+          "en": "found out",
+          "pt": "descobriu",
+          "separable": false
+        }
+      ]
+    }
+  ]
+}
