@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.integrations.storage import StorageError, get_storage
+from app.modules.audio.router import router as audio_router
 from app.modules.auth.router import router as auth_router
 from app.modules.filters.router import router as filters_router
 from app.modules.health.router import router as health_router
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
     app.include_router(users_router)
     app.include_router(filters_router)
     app.include_router(stories_router)
+    app.include_router(audio_router)
 
     return app
 
