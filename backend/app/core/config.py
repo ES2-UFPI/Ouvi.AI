@@ -21,9 +21,19 @@ class Settings(BaseSettings):
     # Origens do front-end autorizadas a chamar a API, separadas por vírgula
     cors_origins: str = "http://localhost:5173"
 
-    minio_endpoint: str = "http://localhost:9000"
-    minio_root_user: str = "ouveai"
-    minio_root_password: str = "ouveai123"
+    # "development" libera comodidades de dev, como criar o bucket sozinho na subida da API
+    app_env: str = "development"
+
+    # Armazenamento de objetos: "s3" (MinIO em dev, Cloudflare R2 em produção) ou "memory" (testes)
+    storage_backend: str = "s3"
+    storage_endpoint: str = "http://localhost:9000"
+    # Endpoint que o NAVEGADOR enxerga, usado nas URLs assinadas. Vazio = o mesmo do storage_endpoint
+    storage_public_endpoint: str | None = None
+    storage_access_key: str = "ouveai"
+    storage_secret_key: str = "ouveai123"
+    storage_bucket: str = "ouveai-audio"
+    # MinIO aceita qualquer região; o R2 usa "auto"
+    storage_region: str = "us-east-1"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
