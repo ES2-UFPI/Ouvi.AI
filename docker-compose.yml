@@ -42,7 +42,12 @@ services:
       # Dentro da rede do Compose os hosts são os nomes dos serviços, não localhost
       # Usa as mesmas variáveis do banco, para API e Postgres nunca ficarem com credenciais diferentes
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      MINIO_ENDPOINT: http://minio:9000
+      STORAGE_ENDPOINT: http://minio:9000
+      # O navegador não enxerga o host `minio`: as URLs assinadas usam a porta publicada no host
+      STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
+      # As credenciais do MinIO vêm do .env da raiz, para API e MinIO nunca ficarem diferentes
+      STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER}
+      STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
     ports:
       - "8000:8000"
     depends_on:
