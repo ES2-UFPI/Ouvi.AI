@@ -53,16 +53,22 @@ class SegmentRepository:
         )
         return self.db.scalar(stmt)
 
-    def list_by_story(self, story_id: int, kind: str | None = None) -> list[Segment]:
+    def list_by_story(
+        self, story_id: int, kind: str | None = None, aligned_only: bool = False
+    ) -> list[Segment]:
         """Frases da história em ordem, já com as anotações carregadas.
 
         selectinload busca as anotações de todas as frases numa única consulta extra,
         então o número de consultas não cresce com o número de frases. O filtro por
-        `kind` é aplicado nessa mesma consulta.
+        `kind` e o de `aligned_only` (só anotações com equivalente em português) são aplicados
+        nessa mesma consulta. As anotações de cada frase vêm ordenadas por `en_start`.
         """
-        annotations = selectinload(Segment.annotations)
+        conditions = []
         if kind is not None:
-            annotations = selectinload(Segment.annotations.and_(Annotation.kind == kind))
+            conditions.append(Annotation.kind == kind)
+        if aligned_only:
+            conditions.append(Annotation.pt_start.is_not(None))
+        annotations = selectinload(Segment.annotations.and_(*conditions)) if conditions else selectinload(Segment.annotations)
         stmt = (
             select(Segment)
             .where(Segment.story_id == story_id)
