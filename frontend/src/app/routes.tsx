@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import { LoginForm } from '../features/auth/components/LoginForm'
 import { RegisterForm } from '../features/auth/components/RegisterForm'
+import { PageLayout } from '../shared/components/PageLayout'
 import { ProtectedRoute } from '../shared/components/ProtectedRoute'
 import { AudioFilterPanel } from '../features/filters/components/AudioFilterPanel'
 import { PlayerPage } from '../features/player/components/PlayerPage'
@@ -20,13 +21,13 @@ export function AppRoutes() {
         <Route
           path="/filter"
           element={
-            <div className="p-8 max-w-md">
+            <PageLayout>
               <AudioFilterPanel />
-            </div>
+            </PageLayout>
           }
         />
 
-        <Route path="/player/:materialId" element={<PlayerPage />} />
+        <Route path="/player/:storyId" element={<PlayerPage />} />
       </Route>
     </Routes>
   )

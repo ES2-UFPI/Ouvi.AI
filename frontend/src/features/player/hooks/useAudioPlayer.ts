@@ -1,39 +1,63 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-const SPEEDS = [0.75, 1, 1.25, 1.5, 2]
+export const SPEEDS = [0.75, 1, 1.25, 1.5, 2]
 
 export function useAudioPlayer() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
-  const [speedIndex, setSpeedIndex] = useState(1) // índice 1 = 1x
+  const [speed, setSpeedState] = useState(1)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
 
+    // Mudar a velocidade não pode mudar o tom da voz (a maioria dos navegadores já faz isso por padrão)
+    audio.preservesPitch = true
+
     const onTimeUpdate = () => setCurrentTime(audio.currentTime)
     const onLoadedMetadata = () => setDuration(audio.duration)
     const onEnded = () => setIsPlaying(false)
-
-    audio.addEventListener('timeupdate', onTimeUpdate)
-    audio.addEventListener('loadedmetadata', onLoadedMetadata)
-    audio.addEventListener('ended', onEnded)
-
-    return () => {
-      audio.removeEventListener('timeupdate', onTimeUpdate)
-      audio.removeEventListener('loadedmetadata', onLoadedMetadata)
-      audio.removeEventListener('ended', onEnded)
+    const onPlay = () => setIsPlaying(true)
+    const onPause = () => setIsPlaying(false)
+    // loadstart e waiting: está buscando dados; canplay e playing: já tem o que tocar
+    const onBusy = () => setIsLoading(true)
+    const onReady = () => setIsLoading(false)
+    const onError = () => {
+      setIsLoading(false)
+      setIsPlaying(false)
+      setError('Não foi possível carregar o áudio.')
     }
+
+    const listeners: [string, () => void][] = [
+      ['timeupdate', onTimeUpdate],
+      ['loadedmetadata', onLoadedMetadata],
+      ['ended', onEnded],
+      ['play', onPlay],
+      ['pause', onPause],
+      ['loadstart', onBusy],
+      ['waiting', onBusy],
+      ['canplay', onReady],
+      ['playing', onReady],
+      ['error', onError],
+    ]
+    listeners.forEach(([name, fn]) => audio.addEventListener(name, fn))
+    return () => listeners.forEach(([name, fn]) => audio.removeEventListener(name, fn))
   }, [])
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current
     if (!audio) return
     if (audio.paused) {
-      audio.play()
       setIsPlaying(true)
+      audio.play().catch(() => {
+        // Play recusado (ex.: o navegador bloqueou ou o arquivo não carregou)
+        setIsPlaying(false)
+        setError('Não foi possível reproduzir o áudio.')
+      })
     } else {
       audio.pause()
       setIsPlaying(false)
@@ -53,23 +77,22 @@ export function useAudioPlayer() {
     audio.currentTime = time
   }, [])
 
-  const cycleSpeed = useCallback(() => {
-    setSpeedIndex((prev) => {
-      const next = (prev + 1) % SPEEDS.length
-      if (audioRef.current) audioRef.current.playbackRate = SPEEDS[next]
-      return next
-    })
+  const setSpeed = useCallback((value: number) => {
+    if (audioRef.current) audioRef.current.playbackRate = value
+    setSpeedState(value)
   }, [])
 
   return {
     audioRef,
     isPlaying,
+    isLoading,
+    error,
     currentTime,
     duration,
-    speed: SPEEDS[speedIndex],
+    speed,
     togglePlay,
     seek,
     seekTo,
-    cycleSpeed,
+    setSpeed,
   }
 }

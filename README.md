@@ -28,7 +28,8 @@ git clone https://github.com/ES2-UFPI/Ouvi.AI.git
 cd Ouvi.AI
 ```
 
-2. Copie os arquivos de variáveis de ambiente de exemplo:
+2. Copie os arquivos de variáveis de ambiente de exemplo (opcional para desenvolvimento: sem o `.env` da raiz,
+   o `docker-compose.yml` usa os mesmos valores do `.env.example`, então `docker compose up` funciona logo após o clone):
 ```bash
 cp .env.example .env
 cp backend/.env.example backend/.env
@@ -183,7 +184,12 @@ uma URL assinada que abre direto no navegador:
 ```bash
 docker compose exec api python -m scripts.upload_sample_audio                  # gera um tom de 30 s
 docker compose exec api python -m scripts.upload_sample_audio caminho/do.mp3   # envia um arquivo seu
+docker compose exec api python -m scripts.upload_sample_audio --story 1 --story 2   # áudio das histórias 1 e 2
 ```
+
+O player da página `/player/<id da história>` pede o áudio na chave `stories/<id>/audio.wav`. Com `--story` o
+script grava o tom de exemplo nessa chave (ou um `.wav` seu, se você informar o caminho). Uma história sem áudio
+mostra "O áudio desta história ainda não foi gerado." no player.
 
 ## Streaming de áudio
 
@@ -213,6 +219,23 @@ Para testar com `curl`, gere uma URL em `GET /audio/url` (pelo `/docs`, depois d
 
 ```bash
 curl -s -o /dev/null -D - -H "Range: bytes=0-99" "<url>"
+```
+
+## Filtro de Audição e player (front)
+
+1. Em `/filter`, escolha a história, o idioma base, o tipo de trecho e a densidade, e clique em **Salvar filtro**.
+   O botão fica desativado até haver idioma base e pelo menos um tipo de trecho. O filtro é gravado em `/filters`,
+   vinculado ao seu usuário, e reaparece preenchido ao reabrir a tela (um filtro por história).
+2. Com o filtro salvo, **Ouvir** leva a `/player/<história>?filter=<id>`. O player pede a URL assinada em
+   `GET /audio/url` e toca com a tag `<audio>`: pular na barra usa HTTP Range. Há play/pausa, voltar e avançar 15 s,
+   velocidades de 0,75x a 2x (sem mudar o tom da voz), tempo atual e duração, indicador de carregamento e mensagem
+   de erro.
+
+## Testes do front
+
+```bash
+cd frontend
+npm run test:run
 ```
 
 ## Testes do backend
