@@ -1,5 +1,7 @@
 # Ouvi.AI
 
+[![CI](https://github.com/ES2-UFPI/Ouvi.AI/actions/workflows/ci.yml/badge.svg)](https://github.com/ES2-UFPI/Ouvi.AI/actions/workflows/ci.yml)
+
 Plataforma de streaming de áudio para aprendizado de idiomas, com alternância
 fluida entre Português e Inglês na mesma faixa, mantendo a mesma voz do
 narrador.
@@ -15,7 +17,7 @@ narrador.
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado e aberto
 - Git
-- [Node.js](https://nodejs.org/) 20 ou mais novo, para rodar o frontend
+- [Node.js](https://nodejs.org/) 22.12 ou mais novo (recomendado: 24), para rodar o frontend e os testes dele (o Vitest 5 não funciona com o Node 20)
 
 O backend, o banco e o MinIO rodam dentro do Docker, sem precisar instalar
 Python. O frontend roda na sua máquina, com `npm run dev`.
@@ -231,23 +233,61 @@ curl -s -o /dev/null -D - -H "Range: bytes=0-99" "<url>"
    velocidades de 0,75x a 2x (sem mudar o tom da voz), tempo atual e duração, indicador de carregamento e mensagem
    de erro.
 
-## Testes do front
+## Testes e integração contínua
 
-```bash
-cd frontend
-npm run test:run
-```
+### Rodando os testes
 
-## Testes do backend
+**Backend** (pytest, dentro do container):
 
 ```bash
 docker compose exec api pip install -r requirements-dev.txt
 docker compose exec api python -m pytest
+docker compose exec api python -m pytest --cov=app --cov-report=term-missing:skip-covered   # com cobertura
 ```
-Os testes que usam o banco rodam numa transação que é desfeita no final: não alteram os dados do seu ambiente.
-Eles precisam do Postgres no ar e migrado (`alembic upgrade head`); sem isso, são pulados.
-O `pip install` precisa ser repetido se o container for recriado (`docker compose up --build`).
-Os testes de armazenamento rodam na `InMemoryStorage` sempre e no MinIO quando ele está no ar; sem ele, a parte S3 é pulada.
+
+- Os testes que usam o banco rodam numa transação que é desfeita no final: não alteram os dados do seu ambiente.
+  Eles precisam do Postgres no ar e migrado (`alembic upgrade head`); **localmente** sem isso são pulados, e **na CI** a
+  suíte falha (senão ficaria verde sem testar nada).
+- O `pip install` precisa ser repetido se o container for recriado (`docker compose up --build`).
+- Os testes de armazenamento rodam na `InMemoryStorage` sempre e no MinIO quando ele está no ar; sem ele, a parte S3 é pulada.
+- Os testes de API usam a fixture `api` (cliente HTTP com a autenticação **real**) e `make_user` (cria um usuário pela
+  própria API), definidas em `backend/tests/conftest.py`.
+
+**Frontend** (Vitest + Testing Library):
+
+```bash
+cd frontend
+npm run test:run     # uma vez
+npm test             # modo observação, reroda ao salvar
+```
+
+### Integração contínua (GitHub Actions)
+
+O workflow `.github/workflows/ci.yml` roda a cada pull request e a cada push na `develop` e na `main`:
+
+| Job | O que faz |
+|---|---|
+| Backend | PostgreSQL 16 de serviço, `alembic upgrade head`, `pytest` com cobertura e **falha se a cobertura ficar abaixo de 80%** |
+| Frontend | `npm ci`, `npm run lint`, `npm run build` (tipos + empacotamento) e `npm run test:run` |
+
+Regra da equipe: **um PR só é mergeado com os dois jobs verdes** (confira a aba *Checks* do PR). Para reproduzir a CI
+na sua máquina, rode os comandos acima antes de abrir o PR.
+
+### TDD: como escrevemos código novo
+
+Funcionalidade nova entra pelo teste, na ordem **vermelho → verde → refatorar**:
+
+1. **Vermelho:** escreva o teste do critério de aceite da issue e rode: ele deve **falhar** (prova que o teste enxerga a falta).
+2. **Verde:** escreva o mínimo de código para o teste passar.
+3. **Refatorar:** limpe o código com a suíte verde, e só então abra o PR.
+
+Boas práticas do projeto:
+
+- Cada critério de aceite da issue vira pelo menos um teste (o nome do teste diz o que ele garante).
+- Teste o erro também: `401`, `404`, `409` e `422`, não só o caminho feliz.
+- Nada de rede, de chave de API paga nem de MinIO nos testes: use o `FakeTTSProvider` e a `InMemoryStorage`.
+- Para duvidar de um teste, estrague o código de propósito (por exemplo, troque um `409` por `400`) e veja se ele falha.
+- Código que só existe para a CI passar não vale: se a cobertura cair, escreva o teste que falta.
 
 ## Rodando a API sem Docker
 
