@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     # MinIO aceita qualquer região; o R2 usa "auto"
     storage_region: str = "us-east-1"
 
+    # Provedor de TTS (síntese de voz): "fake" (tons audíveis, sem rede nem chave) ou o fornecedor real.
+    # O padrão é o falso: um clone novo sobe sem nenhuma chave
+    tts_provider: str = "fake"
+    tts_api_key: str = ""
+    tts_region: str = ""
+    # Voz usada na síntese. O provedor falso ignora; no fornecedor real, é o nome da voz
+    tts_voice_id: str = "fake-voice"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
