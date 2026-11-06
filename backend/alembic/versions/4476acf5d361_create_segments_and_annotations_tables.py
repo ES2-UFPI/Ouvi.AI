@@ -1,4 +1,4 @@
-density"""create segments and annotations tables
+"""create segments and annotations tables
 
 Revision ID: 4476acf5d361
 Revises: 4ea8a13d6f5a
