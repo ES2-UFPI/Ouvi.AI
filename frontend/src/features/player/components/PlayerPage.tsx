@@ -1,13 +1,16 @@
 import axios from 'axios'
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { getFilter } from '../../filters/api'
 import { DENSITY_LABELS, LANGUAGE_LABELS, SEGMENT_LABELS } from '../../filters/labels'
 import { PageLayout } from '../../../shared/components/PageLayout'
-import { listStories } from '../../stories/api'
+import { getStorySegments, listStories } from '../../stories/api'
 import { audioKeyForStory, getAudioUrl } from '../api'
 import { AudioPlayer } from './AudioPlayer'
+import { selectSwapIds } from '../swaps'
+import { BilingualText } from './BilingualText'
 
 export function PlayerPage() {
   const { storyId: storyParam } = useParams<{ storyId: string }>()
@@ -34,15 +37,28 @@ export function PlayerPage() {
     staleTime: 30 * 60 * 1000,
   })
 
+  const segments = useQuery({
+    queryKey: ['segments', storyId],
+    queryFn: () => getStorySegments(storyId),
+    enabled: validStory,
+    retry: false,
+  })
+
   const title = stories.data?.find((s) => s.id === storyId)?.title ?? 'Sua história'
   const rules = filter.data?.rules
+
+  const swapIds = useMemo(
+    () => (rules && segments.data ? selectSwapIds(segments.data.segments, rules.density) : new Set<number>()),
+    [rules, segments.data],
+  )
+
   // Resumo do filtro escolhido, mostrado como etiquetas no topo do player
   const chips = rules
     ? [
-        `Base: ${LANGUAGE_LABELS[rules.base_language]}`,
-        ...rules.segment_types.map((t) => SEGMENT_LABELS[t]),
-        `Densidade ${DENSITY_LABELS[rules.density].toLowerCase()}`,
-      ]
+      `Base: ${LANGUAGE_LABELS[rules.base_language]}`,
+      ...rules.segment_types.map((t) => SEGMENT_LABELS[t]),
+      `Densidade ${DENSITY_LABELS[rules.density].toLowerCase()}`,
+    ]
     : []
 
   let audioError: string | null = null
@@ -80,6 +96,19 @@ export function PlayerPage() {
           )}
         </div>
       )}
+      {rules && segments.data && (
+        <BilingualText
+          segments={segments.data.segments}
+          baseLanguage={rules.base_language}
+          swapIds={swapIds}
+        />
+      )}
+      {rules && segments.isError && (
+        <p role="alert" className="text-sm mt-4" style={{ color: 'var(--color-accent-pt)' }}>
+          Não foi possível carregar o texto da história.
+        </p>
+      )}
+
     </PageLayout>
   )
 }
