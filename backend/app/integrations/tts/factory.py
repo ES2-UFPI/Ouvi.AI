@@ -2,7 +2,8 @@
 from collections.abc import Callable
 from functools import lru_cache
 
-from app.core.config import Settings, get_settings
+from app.core.config import FAKE_VOICE_ID, Settings, get_settings
+from app.integrations.tts.azure import AzureTTSAdapter
 from app.integrations.tts.base import TTSProvider
 from app.integrations.tts.fake import FakeTTSProvider
 
@@ -11,9 +12,25 @@ def _build_fake(settings: Settings) -> TTSProvider:
     return FakeTTSProvider()
 
 
-# Um novo fornecedor entra aqui com uma linha (o "azure" chega na issue do adaptador real)
+def _build_azure(settings: Settings) -> TTSProvider:
+    # Falta de configuração derruba a subida da API, com o nome da variável (e nunca o valor da chave)
+    missing = [name for name, value in (("TTS_API_KEY", settings.tts_api_key), ("TTS_REGION", settings.tts_region))
+               if not value]
+    if missing:
+        raise ValueError(f"TTS_PROVIDER=azure precisa de {' e '.join(missing)} no ambiente (ou no backend/.env)")
+    # A voz padrão é a do provedor falso: o Azure recusaria com 400 só na primeira síntese
+    if not settings.tts_voice_id or settings.tts_voice_id == FAKE_VOICE_ID:
+        raise ValueError(
+            "TTS_PROVIDER=azure precisa de uma voz do Azure em TTS_VOICE_ID "
+            "(ex.: pt-BR-ThalitaMultilingualNeural)"
+        )
+    return AzureTTSAdapter(api_key=settings.tts_api_key, region=settings.tts_region)
+
+
+# Um novo fornecedor entra aqui com uma linha
 _BUILDERS: dict[str, Callable[[Settings], TTSProvider]] = {
     "fake": _build_fake,
+    "azure": _build_azure,
 }
 
 

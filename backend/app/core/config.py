@@ -3,6 +3,9 @@ from functools import lru_cache
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Voz padrão: só o provedor falso aceita. Com um fornecedor real, TTS_VOICE_ID precisa ser trocada
+FAKE_VOICE_ID = "fake-voice"
+
 
 class Settings(BaseSettings):
     """Configurações lidas de variáveis de ambiente (e do arquivo .env, se existir).
@@ -47,7 +50,7 @@ class Settings(BaseSettings):
     tts_api_key: str = ""
     tts_region: str = ""
     # Voz usada na síntese. O provedor falso ignora; no fornecedor real, é o nome da voz
-    tts_voice_id: str = "fake-voice"
+    tts_voice_id: str = FAKE_VOICE_ID
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
