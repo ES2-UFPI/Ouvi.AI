@@ -104,7 +104,7 @@ export function PlayerPage() {
         />
       )}
       {rules && segments.isError && (
-        <p role="alert" className="text-sm mt-4" style={{ color: 'var(--color-accent-pt)' }}>
+        <p className="text-sm mt-4 text-center" style={{ color: 'var(--color-accent-pt)' }}>
           Não foi possível carregar o texto da história.
         </p>
       )}
