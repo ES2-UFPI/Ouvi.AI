@@ -11,6 +11,7 @@ from app.modules.users import models as users_models  # noqa: F401
 from app.modules.filters import models as filters_models  # noqa: F401
 from app.modules.stories import models as stories_models  # noqa: F401
 from app.modules.audio import models as audio_models  # noqa: F401
+from app.modules.progress import models as progress_models  # noqa: F401
 
 config = context.config
 

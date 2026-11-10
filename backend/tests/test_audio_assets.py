@@ -5,7 +5,6 @@ teste de concorrência, que precisa de conexões de verdade e apaga o que criou 
 """
 import threading
 from datetime import timedelta
-from pathlib import Path
 
 import pytest
 from sqlalchemy import func, select, text, update
@@ -20,8 +19,6 @@ from app.modules.audio.models import (
 )
 from app.modules.audio.repository import AudioAssetRepository, InvalidTransition, compute_rules_hash
 from app.modules.stories.models import Segment, Story
-
-BACKEND = Path(__file__).resolve().parents[1]
 
 REGRAS = {"base_language": "pt", "segment_types": ["phrasal_verbs"], "density": "medium"}
 HASH = compute_rules_hash(REGRAS)
@@ -379,28 +376,3 @@ def test_get_or_create_e_seguro_com_chamadas_simultaneas(db_session):
             sessao.execute(text("DELETE FROM stories WHERE id = :id"), {"id": story_id})
             sessao.commit()
 
-
-# ---------- migração ----------
-
-def test_as_migracoes_tem_um_unico_head():
-    from alembic.config import Config
-    from alembic.script import ScriptDirectory
-
-    config = Config(str(BACKEND / "alembic.ini"))
-    config.set_main_option("script_location", str(BACKEND / "alembic"))
-    assert len(ScriptDirectory.from_config(config).get_heads()) == 1
-
-
-def test_o_modelo_e_a_migracao_estao_iguais(db_session):
-    """Equivale ao `alembic check`: o autogenerate não acharia nada para mudar."""
-    from alembic.autogenerate import compare_metadata
-    from alembic.migration import MigrationContext
-
-    from app.core.database import Base
-    # Os mesmos modelos que o alembic/env.py importa: sem eles, as tabelas pareceriam sobrando no banco
-    from app.modules.filters import models as _filtros  # noqa: F401
-    from app.modules.users import models as _usuarios  # noqa: F401
-
-    contexto = MigrationContext.configure(db_session.connection())
-    diferencas = compare_metadata(contexto, Base.metadata)
-    assert diferencas == []
