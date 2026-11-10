@@ -223,6 +223,41 @@ Para testar com `curl`, gere uma URL em `GET /audio/url` (pelo `/docs`, depois d
 curl -s -o /dev/null -D - -H "Range: bytes=0-99" "<url>"
 ```
 
+## Provedor de TTS (síntese de voz)
+
+A voz é gerada por um provedor de TTS escolhido por configuração. O código usa sempre a interface `TTSProvider`
+(`app/integrations/tts`), recebida pela dependência `Depends(get_tts_provider)`, então trocar de fornecedor não mexe
+no resto do sistema. Nenhum módulo fala direto com o fornecedor.
+
+| Variável (`backend/.env`) | Para que serve |
+|---|---|
+| `TTS_PROVIDER` | `fake` (padrão): gera tons, sem rede e sem chave. Um valor desconhecido **derruba a API na subida**, com a lista dos que existem |
+| `TTS_API_KEY` | chave do fornecedor real (o provedor falso ignora). Nunca vai para o repositório |
+| `TTS_REGION` | região do serviço do fornecedor real |
+| `TTS_VOICE_ID` | voz usada na síntese |
+
+Um clone novo sobe com `TTS_PROVIDER=fake`, sem nenhuma chave.
+
+**O provedor falso é audível.** Ele lê o SSML e, para cada pedaço de texto, gera um tom de 60 ms por caractere: o
+idioma base do `<speak>` soa como um tom **grave** (330 Hz) e um trecho em outro idioma (`<lang xml:lang="en-US">`)
+como um tom **agudo** (660 Hz). Assim a troca de idioma já pode ser ouvida sem TTS real. As tags não contam na duração.
+Ele também guarda as chamadas recebidas em `calls`, para os testes conferirem o SSML enviado.
+
+```python
+from app.integrations.tts import FakeTTSProvider
+
+fake = FakeTTSProvider()
+resultado = fake.synthesize(
+    '<speak xml:lang="pt-BR">A raposa <lang xml:lang="en-US">gave up</lang> das uvas.</speak>', "qualquer-voz"
+)
+resultado.format       # "wav"
+resultado.duration_ms  # 60 ms por caractere de texto (sem as tags)
+fake.calls             # [FakeCall(ssml=..., voice_id="qualquer-voz")]
+```
+
+Nos testes, troque o provedor com `app.dependency_overrides[get_tts_provider] = lambda: FakeTTSProvider()`.
+Um erro de síntese é um `TTSError`, com `retryable` dizendo se vale tentar de novo.
+
 ## Filtro de Audição e player (front)
 
 1. Em `/filter`, escolha a história, o idioma base, o tipo de trecho e a densidade, e clique em **Salvar filtro**.
