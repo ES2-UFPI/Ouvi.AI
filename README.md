@@ -308,6 +308,18 @@ O workflow `.github/workflows/ci.yml` roda a cada pull request e a cada push na 
 Regra da equipe: **um PR só é mergeado com os dois jobs verdes** (confira a aba *Checks* do PR). Para reproduzir a CI
 na sua máquina, rode os comandos acima antes de abrir o PR.
 
+### Proteção da `develop` e da `main`
+
+O ruleset **"Regras de Merge"** (*Settings > Rules > Rulesets*) vale para a `develop` e para a `main`, sem exceções
+(nem para administradores):
+
+- **Só por pull request, com 1 aprovação de outra pessoa.** Push direto na branch é recusado, e o GitHub não deixa
+  aprovar o próprio PR. Peça a revisão em *Reviewers* ao abrir o PR.
+- **Não é possível apagar a branch nem fazer force push.**
+
+Fluxo: o autor abre o PR, outra pessoa revisa e aprova, e o **autor** faz o merge. Os jobs verdes da CI continuam sendo
+regra da equipe, mas não bloqueiam o merge no GitHub: confira antes de mergear.
+
 ### TDD: como escrevemos código novo
 
 Funcionalidade nova entra pelo teste, na ordem **vermelho → verde → refatorar**:
