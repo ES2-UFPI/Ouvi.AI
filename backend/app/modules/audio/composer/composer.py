@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from xml.sax.saxutils import escape
 
-from app.modules.audio.composer.strategies import SwapStrategyFactory
+from app.modules.audio.composer.strategies import SwapStrategyFactory, is_aligned
 from app.modules.audio.composer.swap import ComposedText, Swap
 
 if TYPE_CHECKING:
@@ -57,6 +57,11 @@ class AudioComposer:
         for segment_type in segment_types:
             selected |= SwapStrategyFactory.create(segment_type).select(ordered, density)
         return selected
+
+    def count_candidates(self, segments: "Iterable[Segment]", segment_types: Sequence[str]) -> int:
+        """Quantos trechos da história PODEM ser trocados (têm equivalente em português), antes da densidade."""
+        kinds = {SwapStrategyFactory.create(segment_type).kind for segment_type in segment_types}
+        return sum(1 for s in segments for a in s.annotations if a.kind in kinds and is_aligned(a))
 
     def compose(self, segment: "Segment", selected: Collection[int], base_language: str) -> ComposedText:
         """Monta o SSML da frase, trocando só as anotações cujos ids estão em `selected`."""
@@ -116,8 +121,4 @@ class AudioComposer:
     @staticmethod
     def _chosen(segment: "Segment", selected: Collection[int]) -> "list[Annotation]":
         """As anotações escolhidas desta frase que têm equivalente em português (as outras nunca são trocadas)."""
-        return [
-            a
-            for a in segment.annotations
-            if a.id in selected and a.pt_start is not None and a.pt_end is not None and a.pt_text is not None
-        ]
+        return [a for a in segment.annotations if a.id in selected and is_aligned(a)]
