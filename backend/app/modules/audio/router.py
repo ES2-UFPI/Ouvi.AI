@@ -4,7 +4,7 @@ from functools import lru_cache
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.integrations.storage import (
     ObjectStorage,
     StorageError,
@@ -34,14 +34,25 @@ def get_audio_service(
     return AudioService(storage, signer)
 
 
-@router.get("/url", response_model=AudioUrlRead)
+@router.get(
+    "/url",
+    response_model=AudioUrlRead,
+    responses={404: {"description": "Áudio não encontrado, ou API fora de APP_ENV=development"}},
+)
 def get_audio_url(
     request: Request,
     key: str = Query(..., description="Chave do áudio no armazenamento, ex.: samples/tom-440-660hz.wav"),
     _: User = Depends(get_current_user),
     service: AudioService = Depends(get_audio_service),
+    settings: Settings = Depends(get_settings),
 ) -> AudioUrlRead:
-    """Gera a URL assinada do áudio. O front chama esta rota com o token e põe a URL no `<audio>`."""
+    """**Só em desenvolvimento.** Assina uma chave QUALQUER do armazenamento (ex.: o áudio de exemplo).
+
+    Fora de `APP_ENV=development` responde 404: ela deixaria qualquer usuário logado assinar qualquer
+    arquivo. O player usa `GET /audio/segments/{segment_id}`, que confere a posse do filtro.
+    """
+    if settings.app_env != "development":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Não encontrado")
     try:
         params = service.sign(key)
     except StorageObjectNotFound:
@@ -75,7 +86,7 @@ def stream_audio(
     """Entrega o áudio para a tag `<audio>`, com suporte ao header `Range`.
 
     Sem token: o `<audio>` do navegador não envia o header `Authorization`. O acesso é garantido
-    pela URL assinada, gerada em `GET /audio/url`.
+    pela URL assinada, gerada em `GET /audio/segments/{segment_id}`.
     """
     try:
         chunk = service.stream(key, expires, signature, range_header)

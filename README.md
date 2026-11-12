@@ -198,9 +198,14 @@ mostra "O áudio desta história ainda não foi gerado." no player.
 A tag `<audio>` do navegador não envia o header `Authorization`, então o áudio é entregue por uma URL
 assinada (HMAC-SHA256) de curta duração, em duas etapas:
 
-1. O front chama `GET /audio/url?key=<chave>` **com o token** e recebe `{"url": ..., "expires_at": ...}`.
+1. O front chama `GET /audio/segments/{segment_id}?filter_id=<id>` **com o token** e recebe
+   `{"url": ..., "expires_at": ..., "segment_id": ..., "duration_ms": ..., "format": "wav"}`. A rota confere que o
+   filtro é do usuário (veja "Geração do áudio" abaixo).
 2. O front põe essa `url` no `src` do `<audio>`. Ela aponta para `GET /audio/stream`, que **não exige token**:
    a assinatura basta.
+
+`GET /audio/url?key=<chave>`, que assina uma chave **qualquer** do armazenamento, só funciona com
+`APP_ENV=development` (fora dele responde `404`). Serve ao áudio de exemplo do player enquanto ele não usa a rota por frase.
 
 `GET /audio/stream` suporta o header `Range`, para o player pular para o meio sem baixar o arquivo todo:
 
@@ -222,6 +227,34 @@ Para testar com `curl`, gere uma URL em `GET /audio/url` (pelo `/docs`, depois d
 ```bash
 curl -s -o /dev/null -D - -H "Range: bytes=0-99" "<url>"
 ```
+
+## Geração do áudio (AudioGenerationFacade)
+
+A `AudioGenerationFacade` (`backend/app/modules/audio/facade.py`) gera o áudio de uma história com um filtro: para
+cada frase, em ordem, compõe o SSML (AudioComposer), sintetiza (TTS), grava no armazenamento e marca o `AudioAsset`
+como `ready`. Erros recuperáveis do TTS são tentados de novo; uma frase que falha de vez fica `failed` sem derrubar
+as outras. Gerar de novo não refaz o que já está pronto, e frases presas em `generating` voltam para a fila.
+
+Todas as rotas exigem token; filtro inexistente ou de outro usuário responde `404`, e filtro de outra história, `422`.
+
+| Rota | O que faz |
+|---|---|
+| `POST /stories/{story_id}/audio` com `{"filter_id": 3}` | dispara a geração em segundo plano e responde `202` com o status. Durante a geração não dispara outra (`202`); com tudo pronto responde `200` |
+| `GET /stories/{story_id}/audio/status?filter_id=3` | progresso, para o front consultar por polling |
+| `GET /audio/segments/{segment_id}?filter_id=3` | URL assinada do áudio da frase; `409` se ainda não está pronto ou se falhou |
+
+Resposta do `POST` e do `status`:
+
+```json
+{
+  "story_id": 1, "filter_id": 3, "state": "generating", "total": 12, "ready": 5, "failed": 0,
+  "segments": [{"segment_id": 7, "position": 0, "status": "ready", "duration_ms": 2340, "error": null}]
+}
+```
+
+`state` é `pending` (nada em andamento), `generating`, `ready` (todas prontas) ou `failed` (terminou com alguma frase
+em falha; um novo `POST` tenta de novo só as que falharam). `status` de cada frase: `pending`, `generating`, `ready`
+ou `failed`.
 
 ## Provedor de TTS (síntese de voz)
 
