@@ -22,6 +22,10 @@ def main() -> int:
     parser.add_argument("--story", type=int, help="id da história (padrão: a primeira)")
     parser.add_argument("--density", choices=list(DENSITY_SHARE), default="medium")
     parser.add_argument("--base", choices=["pt", "en"], default="pt", help="idioma base (o que aparece na tela)")
+    parser.add_argument(
+        "--level", choices=["intermediate", "advanced"], default="intermediate",
+        help="nível das palavras difíceis (só com --base en)",
+    )
     parser.add_argument("--ssml", action="store_true", help="mostra também o SSML de cada frase")
     args = parser.parse_args()
 
@@ -34,7 +38,9 @@ def main() -> int:
         segments = SegmentRepository(db).list_by_story(story.id)
 
         composer = AudioComposer()
-        selected = composer.select_swaps(segments, ["phrasal_verbs"], args.density)
+        # Cenário A (base pt): phrasal verbs; Cenário B (base en): palavras difíceis
+        segment_type = "difficult_words" if args.base == "en" else "phrasal_verbs"
+        selected = composer.select_swaps(segments, [segment_type], args.density, args.level)
         candidates = sum(1 for s in segments for a in s.annotations if a.pt_start is not None)
 
         print(f"{story.title}: densidade {args.density} ({DENSITY_SHARE[args.density]:.0%}), base {args.base}\n")

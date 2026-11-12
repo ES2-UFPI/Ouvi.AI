@@ -24,11 +24,14 @@ def test_filtro_pode_ser_criado_sem_historia(api, make_user):
     assert api.post("/filters", json=corpo(), headers=headers).json()["story_id"] is None
 
 
+CENARIO_B = {"base_language": "en", "segment_types": ["difficult_words"], "word_level": "intermediate"}
+
+
 @pytest.mark.parametrize("densidade", ["low", "medium", "high"])
-@pytest.mark.parametrize("idioma", ["pt", "en"])
-def test_aceita_todos_os_idiomas_base_e_densidades(api, make_user, idioma, densidade):
+@pytest.mark.parametrize("cenario", [{}, CENARIO_B], ids=["cenario_a", "cenario_b"])
+def test_aceita_todos_os_cenarios_e_densidades(api, make_user, cenario, densidade):
     _, headers = make_user()
-    resposta = api.post("/filters", json=corpo(base_language=idioma, density=densidade), headers=headers)
+    resposta = api.post("/filters", json=corpo(**cenario, density=densidade), headers=headers)
     assert resposta.status_code == 201
 
 
@@ -92,7 +95,7 @@ def test_filtro_inexistente_responde_404(api, make_user):
 def test_put_substitui_o_filtro_inteiro(api, make_user):
     _, headers = make_user()
     criado = api.post("/filters", json=corpo(story_id=1), headers=headers).json()
-    novo = {"story_id": 2, "rules": {"base_language": "en", "segment_types": ["phrasal_verbs"], "density": "high"}}
+    novo = {"story_id": 2, "rules": {**CENARIO_B, "density": "high"}}
 
     resposta = api.put(f"/filters/{criado['id']}", json=novo, headers=headers)
     assert resposta.status_code == 200

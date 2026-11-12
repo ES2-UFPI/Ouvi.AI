@@ -3,7 +3,8 @@ from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Protocol
 
 from app.modules.audio.composer.density import pick_evenly
-from app.modules.stories.models import KIND_PHRASAL_VERB
+from app.modules.stories.models import KIND_DIFFICULT_WORD, KIND_PHRASAL_VERB
+from app.modules.stories.nlp.levels import LEVEL_INTERMEDIATE, levels_for_filter
 
 if TYPE_CHECKING:
     from app.modules.stories.models import Annotation
@@ -37,10 +38,32 @@ class PhrasalVerbStrategy:
         return {candidates[i].id for i in pick_evenly(len(candidates), density)}
 
 
+class DifficultWordStrategy:
+    """Troca palavras difíceis (Cenário B: base inglês, a palavra é falada em português).
+
+    Entram só as alinhadas e do nível pedido no filtro: `intermediate` considera as pouco frequentes e as
+    raras; `advanced` só as raras, então troca menos palavras. A densidade vale sobre esses candidatos."""
+
+    kind = KIND_DIFFICULT_WORD
+
+    def __init__(self, word_level: str | None = None) -> None:
+        self.levels = levels_for_filter(word_level or LEVEL_INTERMEDIATE)
+
+    def select(self, annotations: "Sequence[Annotation]", density: str) -> set[int]:
+        candidates = [
+            a
+            for a in annotations
+            if a.kind == self.kind and is_aligned(a) and (a.extra or {}).get("level") in self.levels
+        ]
+        return {candidates[i].id for i in pick_evenly(len(candidates), density)}
+
+
 class SwapStrategyFactory:
     # O tipo do FILTRO ("phrasal_verbs", no plural) liga à estratégia. Um novo tipo entra aqui com uma linha.
-    _registry: dict[str, Callable[[], SwapStrategy]] = {
-        "phrasal_verbs": PhrasalVerbStrategy,
+    # Cada construtor recebe as opções do filtro (hoje só `word_level`) e usa as que lhe interessam.
+    _registry: dict[str, Callable[[str | None], SwapStrategy]] = {
+        "phrasal_verbs": lambda word_level: PhrasalVerbStrategy(),
+        "difficult_words": DifficultWordStrategy,
     }
 
     @classmethod
@@ -48,7 +71,7 @@ class SwapStrategyFactory:
         return sorted(cls._registry)
 
     @classmethod
-    def create(cls, segment_type: str) -> SwapStrategy:
+    def create(cls, segment_type: str, word_level: str | None = None) -> SwapStrategy:
         try:
             builder = cls._registry[segment_type]
         except KeyError:
@@ -56,4 +79,4 @@ class SwapStrategyFactory:
             raise UnknownSwapStrategyError(
                 f"Tipo de trecho sem estratégia de troca: {segment_type!r}. Disponíveis: {available}"
             ) from None
-        return builder()
+        return builder(word_level)

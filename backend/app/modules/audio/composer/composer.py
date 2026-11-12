@@ -42,8 +42,16 @@ def _escape(text: str) -> str:
 
 
 class AudioComposer:
-    def select_swaps(self, segments: "Iterable[Segment]", segment_types: Sequence[str], density: str) -> set[int]:
+    def select_swaps(
+        self,
+        segments: "Iterable[Segment]",
+        segment_types: Sequence[str],
+        density: str,
+        word_level: str | None = None,
+    ) -> set[int]:
         """Ids das anotações que serão trocadas, calculados sobre a HISTÓRIA INTEIRA.
+
+        `word_level` é o nível das palavras difíceis (filtro do Cenário B); os outros tipos o ignoram.
 
         A prévia e a geração de áudio devem usar esta mesma função: assim o que o usuário vê é o que ele ouve.
         """
@@ -55,13 +63,26 @@ class AudioComposer:
         ]
         selected: set[int] = set()
         for segment_type in segment_types:
-            selected |= SwapStrategyFactory.create(segment_type).select(ordered, density)
+            selected |= SwapStrategyFactory.create(segment_type, word_level).select(ordered, density)
         return selected
 
-    def count_candidates(self, segments: "Iterable[Segment]", segment_types: Sequence[str]) -> int:
-        """Quantos trechos da história PODEM ser trocados (têm equivalente em português), antes da densidade."""
-        kinds = {SwapStrategyFactory.create(segment_type).kind for segment_type in segment_types}
-        return sum(1 for s in segments for a in s.annotations if a.kind in kinds and is_aligned(a))
+    def count_candidates(
+        self, segments: "Iterable[Segment]", segment_types: Sequence[str], word_level: str | None = None
+    ) -> int:
+        """Quantos trechos da história PODEM ser trocados (têm equivalente em português), antes da densidade.
+
+        Com palavras difíceis, só contam as do nível do filtro (as mesmas que a estratégia considera).
+        """
+        strategies = [SwapStrategyFactory.create(segment_type, word_level) for segment_type in segment_types]
+
+        def candidate(a: "Annotation") -> bool:
+            for strategy in strategies:
+                levels = getattr(strategy, "levels", None)
+                if a.kind == strategy.kind and is_aligned(a) and (levels is None or (a.extra or {}).get("level") in levels):
+                    return True
+            return False
+
+        return sum(1 for s in segments for a in s.annotations if candidate(a))
 
     def compose(self, segment: "Segment", selected: Collection[int], base_language: str) -> ComposedText:
         """Monta o SSML da frase, trocando só as anotações cujos ids estão em `selected`."""

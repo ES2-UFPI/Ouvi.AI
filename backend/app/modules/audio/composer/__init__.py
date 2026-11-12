@@ -6,6 +6,7 @@ e a prévia do texto usam `select_swaps` e `compose`, para o que o usuário vê 
 from app.modules.audio.composer.composer import AudioComposer
 from app.modules.audio.composer.density import DENSITY_SHARE
 from app.modules.audio.composer.strategies import (
+    DifficultWordStrategy,
     PhrasalVerbStrategy,
     SwapStrategy,
     SwapStrategyFactory,
@@ -17,6 +18,7 @@ __all__ = [
     "AudioComposer",
     "ComposedText",
     "DENSITY_SHARE",
+    "DifficultWordStrategy",
     "PhrasalVerbStrategy",
     "Swap",
     "SwapStrategy",

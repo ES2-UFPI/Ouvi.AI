@@ -6,12 +6,17 @@ import pytest
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
     """Mostra no fim de toda execução o relatório do corpus do detector, quando ele rodou."""
-    report = getattr(config, "corpus_report", None)
-    if not report:
-        return
-    terminalreporter.section("Detector de phrasal verbs: corpus de referência")
-    for line in report:
-        terminalreporter.write_line(line)
+    sections = [
+        ("corpus_report", "Detector de phrasal verbs: corpus de referência"),
+        ("difficult_words_corpus_report", "Detector de palavras difíceis: corpus de referência"),
+    ]
+    for attribute, title in sections:
+        report = getattr(config, attribute, None)
+        if not report:
+            continue
+        terminalreporter.section(title)
+        for line in report:
+            terminalreporter.write_line(line)
 
 
 PASSWORD = "Senha1234"

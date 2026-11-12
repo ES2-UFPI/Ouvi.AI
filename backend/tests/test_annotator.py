@@ -10,7 +10,9 @@ from sqlalchemy import select
 
 from app.modules.stories import annotate
 from app.modules.stories.annotator import TextAnnotator
-from app.modules.stories.models import Annotation, Segment, Story
+from app.modules.stories.models import KIND_PHRASAL_VERB, Annotation, Segment, Story
+from app.modules.stories.nlp.alignment import DictionaryAligner
+from app.modules.stories.nlp.factory import DetectorFactory
 from app.modules.stories.repository import (
     AnnotationRepository,
     SegmentRepository,
@@ -198,6 +200,12 @@ def test_dry_run_nao_mexe_nas_anotacoes_que_ja_existem(db_session, annotator):
 
 # ---------- as três histórias do seed ----------
 
+def so_phrasal_verbs(db_session) -> TextAnnotator:
+    """Anotador só de phrasal verbs: os testes de alinhamento do seed medem esse tipo
+    (as palavras difíceis têm testes próprios)."""
+    return TextAnnotator(db_session, [DetectorFactory.create(KIND_PHRASAL_VERB)], DictionaryAligner())
+
+
 def anotar_seed(db_session, annotator):
     load_seed(db_session)
     ids = {}
@@ -207,21 +215,21 @@ def anotar_seed(db_session, annotator):
     return ids, reports
 
 
-def test_pelo_menos_90_por_cento_dos_phrasal_verbs_do_seed_saem_alinhados(db_session, annotator):
-    _, reports = anotar_seed(db_session, annotator)
+def test_pelo_menos_90_por_cento_dos_phrasal_verbs_do_seed_saem_alinhados(db_session):
+    _, reports = anotar_seed(db_session, so_phrasal_verbs(db_session))
     detectados = sum(r.detected for r in reports.values())
     alinhados = sum(r.aligned for r in reports.values())
     assert detectados >= 30
     assert alinhados / detectados >= 0.9, [i for r in reports.values() for i in r.unaligned_items]
 
 
-def test_alinhamento_do_seed_aponta_para_o_lugar_marcado_pela_equipe(db_session, annotator):
-    ids, _ = anotar_seed(db_session, annotator)
+def test_alinhamento_do_seed_aponta_para_o_lugar_marcado_pela_equipe(db_session):
+    ids, _ = anotar_seed(db_session, so_phrasal_verbs(db_session))
     seed = {s.title: s for s in read_seed_files()}
     erros = []
     for titulo, sid in ids.items():
         segmentos = {s.id: s for s in SegmentRepository(db_session).list_by_story(sid)}
-        for a in anotacoes(db_session, sid):
+        for a in [a for a in anotacoes(db_session, sid) if a.kind == KIND_PHRASAL_VERB]:
             seg = segmentos[a.segment_id]
             assert a.pt_start is not None and seg.text_pt[a.pt_start : a.pt_end] == a.pt_text
             marcado = {pv.lemma: pv.pt for pv in seed[titulo].segments[seg.position].phrasal_verbs}[a.lemma]
