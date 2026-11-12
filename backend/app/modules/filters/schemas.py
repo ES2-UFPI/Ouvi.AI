@@ -20,6 +20,10 @@ Density = Literal["low", "medium", "high"]
 # Nível das palavras difíceis: `intermediate` troca mais palavras (as pouco frequentes e as raras),
 # `advanced` só as raras
 WordLevel = Literal["intermediate", "advanced"]
+# Progressão da densidade ao longo da história (US11): `constant` troca na mesma proporção do começo ao fim;
+# `increasing` começa com poucas trocas e termina com muitas (curva em app/modules/audio/composer/density.py).
+# Vale para qualquer cenário. Ausente = constante.
+Progression = Literal["constant", "increasing"]
 
 
 class Scenario(BaseModel):
@@ -88,6 +92,7 @@ class StoredFilterRules(BaseModel):
     segment_types: list[SegmentType] = Field(min_length=1)
     density: Density
     word_level: WordLevel | None = None
+    progression: Progression | None = None
 
     @model_serializer(mode="wrap")
     def _omit_empty_level(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
@@ -96,6 +101,10 @@ class StoredFilterRules(BaseModel):
         data = handler(self)
         if data.get("word_level") is None:
             data.pop("word_level", None)
+        # Mesma ideia para a progressão: a constante é o padrão e não aparece, então os filtros e os áudios
+        # já gerados dos Cenários A e B continuam com o mesmo hash
+        if data.get("progression") in (None, "constant"):
+            data.pop("progression", None)
         return data
 
 
@@ -148,3 +157,4 @@ class FilterOptions(BaseModel):
     scenarios: list[Scenario]
     densities: list[Density]
     word_levels: list[WordLevel]
+    progressions: list[Progression]

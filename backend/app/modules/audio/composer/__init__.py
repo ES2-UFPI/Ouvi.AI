@@ -4,7 +4,13 @@ Sem rede, banco ou TTS: o `AudioComposer` só recebe frases e anotações. O pip
 e a prévia do texto usam `select_swaps` e `compose`, para o que o usuário vê ser o que ele ouve.
 """
 from app.modules.audio.composer.composer import AudioComposer
-from app.modules.audio.composer.density import DENSITY_SHARE
+from app.modules.audio.composer.density import (
+    DENSITY_SHARE,
+    PHASE_WEIGHTS,
+    PROGRESSION_CONSTANT,
+    PROGRESSION_INCREASING,
+    PROGRESSIONS,
+)
 from app.modules.audio.composer.strategies import (
     AdvancedVocabularyStrategy,
     DifficultWordStrategy,
@@ -21,6 +27,10 @@ __all__ = [
     "ComposedText",
     "DENSITY_SHARE",
     "DifficultWordStrategy",
+    "PHASE_WEIGHTS",
+    "PROGRESSIONS",
+    "PROGRESSION_CONSTANT",
+    "PROGRESSION_INCREASING",
     "PhrasalVerbStrategy",
     "Swap",
     "SwapStrategy",

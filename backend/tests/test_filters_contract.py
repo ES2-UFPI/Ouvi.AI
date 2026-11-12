@@ -161,6 +161,45 @@ def test_cenario_c_fora_da_tabela_responde_422(api, make_user, regras, trecho_da
     assert trecho_da_mensagem in resposta.text
 
 
+def test_progressao_crescente_e_gravada_e_lida(api, make_user):
+    _, headers = make_user()
+    regras = {**CENARIO_C, "progression": "increasing"}
+    criado = api.post("/filters", json=corpo(**regras), headers=headers)
+    assert criado.status_code == 201, criado.text
+    assert criado.json()["rules"] == regras
+    assert api.get(f"/filters/{criado.json()['id']}", headers=headers).json()["rules"] == regras
+
+
+@pytest.mark.parametrize("cenario", [CENARIO_A, CENARIO_B])
+def test_progressao_vale_para_os_outros_cenarios(cenario):
+    regras = {**cenario, "progression": "increasing"}
+    assert FilterRules.model_validate(regras).model_dump() == regras
+
+
+@pytest.mark.parametrize("cenario", [CENARIO_A, CENARIO_B, CENARIO_C])
+def test_progressao_constante_nao_aparece_e_nao_muda_o_hash(cenario):
+    # a constante é o padrão: as regras (e o hash do cache de áudio) ficam iguais às de antes do campo
+    explicita = FilterRules.model_validate({**cenario, "progression": "constant"}).model_dump()
+    assert explicita == cenario
+    assert compute_rules_hash(explicita) == compute_rules_hash(cenario)
+
+
+def test_progressao_crescente_muda_o_hash():
+    crescente = FilterRules.model_validate({**CENARIO_C, "progression": "increasing"}).model_dump()
+    assert compute_rules_hash(crescente) != compute_rules_hash(CENARIO_C)
+
+
+def test_progressao_desconhecida_responde_422(api, make_user):
+    _, headers = make_user()
+    resposta = api.post("/filters", json=corpo(**CENARIO_C, progression="decreasing"), headers=headers)
+    assert resposta.status_code == 422
+
+
+def test_options_lista_as_progressoes(api, make_user):
+    _, headers = make_user()
+    assert api.get("/filters/options", headers=headers).json()["progressions"] == ["constant", "increasing"]
+
+
 def test_mensagem_lista_os_tipos_dos_dois_cenarios_em_portugues():
     with pytest.raises(ValidationError, match="os tipos aceitos são: phrasal_verbs, advanced_vocabulary"):
         FilterRules.model_validate({**CENARIO_C, "segment_types": ["difficult_words"]})

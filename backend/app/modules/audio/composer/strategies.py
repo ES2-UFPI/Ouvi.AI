@@ -1,8 +1,8 @@
 """Estratégias de troca (Strategy) e a fábrica que escolhe a estratégia pelo tipo de trecho do filtro."""
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Protocol
 
-from app.modules.audio.composer.density import pick_evenly
+from app.modules.audio.composer.density import pick_evenly, pick_increasing
 from app.modules.stories.models import KIND_DIFFICULT_WORD, KIND_PHRASAL_VERB
 from app.modules.stories.nlp.levels import LEVEL_ADVANCED, LEVEL_INTERMEDIATE, levels_for_filter
 
@@ -17,8 +17,13 @@ class UnknownSwapStrategyError(ValueError):
 class SwapStrategy(Protocol):
     kind: str  # tipo de ANOTAÇÃO que a estratégia escolhe (no filtro o tipo tem outro nome)
 
-    def select(self, annotations: "Sequence[Annotation]", density: str) -> set[int]:
-        """Ids das anotações que serão trocadas. Recebe as anotações da história inteira, em ordem de aparição."""
+    def select(
+        self, annotations: "Sequence[Annotation]", density: str, phases: Mapping[int, int] | None = None
+    ) -> set[int]:
+        """Ids das anotações que serão trocadas. Recebe as anotações da história inteira, em ordem de aparição.
+
+        `phases` (id da anotação -> terço da história) liga a densidade crescente; sem ele, ela é constante.
+        """
         ...
 
 
@@ -27,15 +32,26 @@ def is_aligned(annotation: "Annotation") -> bool:
     return annotation.pt_start is not None and annotation.pt_end is not None and annotation.pt_text is not None
 
 
+def pick(candidates: "Sequence[Annotation]", density: str, phases: Mapping[int, int] | None) -> set[int]:
+    """Aplica a densidade (constante ou crescente) sobre os candidatos, em ordem de aparição."""
+    if phases is None:
+        indices = pick_evenly(len(candidates), density)
+    else:
+        indices = pick_increasing([phases[a.id] for a in candidates], density)
+    return {candidates[i].id for i in indices}
+
+
 class PhrasalVerbStrategy:
     """Troca phrasal verbs. Só entram os que têm equivalente alinhado em português: sem ele não há o
     que trocar nem onde (e a conta da densidade também só considera esses)."""
 
     kind = KIND_PHRASAL_VERB
 
-    def select(self, annotations: "Sequence[Annotation]", density: str) -> set[int]:
+    def select(
+        self, annotations: "Sequence[Annotation]", density: str, phases: Mapping[int, int] | None = None
+    ) -> set[int]:
         candidates = [a for a in annotations if a.kind == self.kind and is_aligned(a)]
-        return {candidates[i].id for i in pick_evenly(len(candidates), density)}
+        return pick(candidates, density, phases)
 
 
 class DifficultWordStrategy:
@@ -49,32 +65,26 @@ class DifficultWordStrategy:
     def __init__(self, word_level: str | None = None) -> None:
         self.levels = levels_for_filter(word_level or LEVEL_INTERMEDIATE)
 
-    def select(self, annotations: "Sequence[Annotation]", density: str) -> set[int]:
+    def select(
+        self, annotations: "Sequence[Annotation]", density: str, phases: Mapping[int, int] | None = None
+    ) -> set[int]:
         candidates = [
             a
             for a in annotations
             if a.kind == self.kind and is_aligned(a) and (a.extra or {}).get("level") in self.levels
         ]
-        return {candidates[i].id for i in pick_evenly(len(candidates), density)}
+        return pick(candidates, density, phases)
 
 
-class AdvancedVocabularyStrategy:
+class AdvancedVocabularyStrategy(DifficultWordStrategy):
     """Troca o vocabulário avançado (Cenário C: base português, a palavra é falada em inglês).
 
     Reaproveita as anotações de palavras difíceis (a mesma lista de frequência), mas só as RARAS (nível
-    avançado) e sempre na direção oposta à do Cenário B: o texto fica em português e a palavra rara é
-    ouvida em inglês. Não usa `word_level`: o próprio tipo já é o nível mais alto."""
+    avançado) e na direção oposta à do Cenário B: o texto fica em português e a palavra rara é ouvida em
+    inglês. Não usa `word_level`: o próprio tipo já é o nível mais alto."""
 
-    kind = KIND_DIFFICULT_WORD
-    levels = frozenset({LEVEL_ADVANCED})
-
-    def select(self, annotations: "Sequence[Annotation]", density: str) -> set[int]:
-        candidates = [
-            a
-            for a in annotations
-            if a.kind == self.kind and is_aligned(a) and (a.extra or {}).get("level") in self.levels
-        ]
-        return {candidates[i].id for i in pick_evenly(len(candidates), density)}
+    def __init__(self) -> None:
+        super().__init__(LEVEL_ADVANCED)
 
 
 class SwapStrategyFactory:
