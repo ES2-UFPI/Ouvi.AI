@@ -1,22 +1,60 @@
 import { useState } from 'react'
+import axios from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { ChevronDown, Headphones, SlidersHorizontal } from 'lucide-react'
 import { listStories } from '../../stories/api'
 import {
   createFilter,
+  getFilterOptions,
   listFilters,
   updateFilter,
   type BaseLanguage,
   type Density,
+  type FilterOptions,
   type FilterPayload,
+  type FilterRules,
   type SegmentType,
+  type WordLevel,
 } from '../api'
-import { DENSITY_LABELS, LANGUAGE_LABELS, SEGMENT_LABELS } from '../labels'
+import {
+  DENSITY_LABELS,
+  LANGUAGE_LABELS,
+  SEGMENT_HINTS,
+  SEGMENT_LABELS,
+  WORD_LEVEL_HINTS,
+  WORD_LEVEL_LABELS,
+} from '../labels'
 
-const LANGUAGES = Object.keys(LANGUAGE_LABELS) as BaseLanguage[]
-const SEGMENT_TYPES = Object.keys(SEGMENT_LABELS) as SegmentType[]
-const DENSITIES = Object.keys(DENSITY_LABELS) as Density[]
+// Cópia da tabela do backend, usada só enquanto GET /filters/options não responde (ou se ele falhar)
+const FALLBACK_OPTIONS: FilterOptions = {
+  scenarios: [
+    { base_language: 'pt', segment_types: ['phrasal_verbs'], word_levels: [], description: '' },
+    {
+      base_language: 'en',
+      segment_types: ['difficult_words'],
+      word_levels: ['intermediate', 'advanced'],
+      description: '',
+    },
+  ],
+  densities: ['low', 'medium', 'high'],
+  word_levels: ['intermediate', 'advanced'],
+}
+
+// Mensagens da API (422) em português; o Pydantic começa cada uma com "Value error, "
+function saveErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error) && error.response?.status === 422) {
+    const detail: unknown = error.response.data?.detail
+    if (Array.isArray(detail)) {
+      const messages = detail
+        .map((d: { msg?: unknown }) => (typeof d?.msg === 'string' ? d.msg.replace(/^Value error, /, '') : null))
+        .filter((m): m is string => !!m)
+      if (messages.length) return `Filtro inválido: ${messages.join(' ')}`
+    }
+    if (typeof detail === 'string') return `Filtro inválido: ${detail}`
+  }
+  return 'Não foi possível salvar o filtro. Tente novamente.'
+}
 
 const SECTION_TITLE = 'block text-xs uppercase tracking-wider text-text-muted mb-2.5'
 
@@ -63,10 +101,11 @@ interface FormValues {
   baseLanguage: BaseLanguage | null
   segmentTypes: SegmentType[]
   density: Density
+  wordLevel: WordLevel | null
 }
 
 // Começa vazio de propósito: o usuário precisa escolher o idioma base e o tipo de trecho
-const EMPTY_FORM: FormValues = { baseLanguage: null, segmentTypes: [], density: 'medium' }
+const EMPTY_FORM: FormValues = { baseLanguage: null, segmentTypes: [], density: 'medium', wordLevel: null }
 
 export function AudioFilterPanel() {
   const queryClient = useQueryClient()
@@ -76,6 +115,10 @@ export function AudioFilterPanel() {
 
   const stories = useQuery({ queryKey: ['stories'], queryFn: listStories })
   const filters = useQuery({ queryKey: ['filters'], queryFn: listFilters })
+  // A tela só oferece as combinações que a API aceita
+  const options = useQuery({ queryKey: ['filter-options'], queryFn: getFilterOptions, staleTime: Infinity })
+  const { scenarios, densities } = options.data ?? FALLBACK_OPTIONS
+  const languages = scenarios.map((s) => s.base_language)
 
   const storyId = selectedStory ?? stories.data?.[0]?.id ?? null
   // Um filtro por história: o filtro salvo da história escolhida é o que reaparece ao reabrir a tela
@@ -85,12 +128,24 @@ export function AudioFilterPanel() {
         baseLanguage: saved.rules.base_language,
         segmentTypes: saved.rules.segment_types,
         density: saved.rules.density,
+        wordLevel: saved.rules.word_level ?? null,
       }
     : EMPTY_FORM
-  const { baseLanguage, segmentTypes, density } = draft ?? savedForm
+  const { baseLanguage, segmentTypes, density, wordLevel } = draft ?? savedForm
+  const scenario = scenarios.find((s) => s.base_language === baseLanguage)
+  // Só os tipos (e níveis) do cenário do idioma base escolhido
+  const allowedTypes = scenario?.segment_types ?? []
+  const wordLevels = scenario?.word_levels ?? []
+  const needsLevel = wordLevels.length > 0
 
   function edit(patch: Partial<FormValues>) {
-    setDraft({ baseLanguage, segmentTypes, density, ...patch })
+    setDraft({ baseLanguage, segmentTypes, density, wordLevel, ...patch })
+  }
+
+  function changeLanguage(lang: BaseLanguage) {
+    if (lang === baseLanguage) return
+    // Outro idioma base é outro cenário: os tipos e o nível escolhidos antes deixam de valer
+    edit({ baseLanguage: lang, segmentTypes: [], wordLevel: null })
   }
 
   function changeStory(id: number) {
@@ -116,18 +171,25 @@ export function AudioFilterPanel() {
     })
   }
 
-  const canSave = storyId !== null && baseLanguage !== null && segmentTypes.length > 0
+  // Um filtro antigo pode ter um tipo que o cenário não aceita mais: esse tipo não conta nem é enviado
+  const validTypes = segmentTypes.filter((t) => allowedTypes.includes(t))
+  const canSave =
+    storyId !== null && baseLanguage !== null && validTypes.length > 0 && (!needsLevel || wordLevel !== null)
   const unchanged =
     saved !== undefined &&
     saved.rules.base_language === baseLanguage &&
     saved.rules.density === density &&
+    (saved.rules.word_level ?? null) === (needsLevel ? wordLevel : null) &&
     saved.rules.segment_types.length === segmentTypes.length &&
     saved.rules.segment_types.every((t) => segmentTypes.includes(t))
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!canSave) return
-    save.mutate({ story_id: storyId, rules: { base_language: baseLanguage, segment_types: segmentTypes, density } })
+    const rules: FilterRules = { base_language: baseLanguage, segment_types: validTypes, density }
+    // O nível só vai no cenário que o usa; nos outros a API recusa o campo
+    if (needsLevel && wordLevel) rules.word_level = wordLevel
+    save.mutate({ story_id: storyId, rules })
   }
 
   const loadFailed = stories.isError || filters.isError
@@ -183,13 +245,13 @@ export function AudioFilterPanel() {
       <fieldset className="mb-6">
         <legend className={SECTION_TITLE}>Idioma base</legend>
         <div className="grid grid-cols-2 gap-3">
-          {LANGUAGES.map((lang) => (
+          {languages.map((lang) => (
             <Choice
               key={lang}
               type="radio"
               name="base-language"
               checked={baseLanguage === lang}
-              onChange={() => edit({ baseLanguage: lang })}
+              onChange={() => changeLanguage(lang)}
               label={LANGUAGE_LABELS[lang]}
               badge={lang.toUpperCase()}
               accent={lang === 'pt' ? 'var(--color-accent-pt)' : 'var(--color-accent-en)'}
@@ -200,22 +262,51 @@ export function AudioFilterPanel() {
 
       <fieldset className="mb-6">
         <legend className={SECTION_TITLE}>Tipo de trecho</legend>
-        {SEGMENT_TYPES.map((type) => (
-          <Choice
-            key={type}
-            type="checkbox"
-            checked={segmentTypes.includes(type)}
-            onChange={() => toggleSegmentType(type)}
-            label={SEGMENT_LABELS[type]}
-            accent="var(--color-accent-en)"
-          />
-        ))}
+        {baseLanguage === null ? (
+          <p className="text-xs text-text-muted">Escolha o idioma base para ver os tipos de trecho.</p>
+        ) : (
+          <div className="space-y-2">
+            {allowedTypes.map((type) => (
+              <div key={type}>
+                <Choice
+                  type="checkbox"
+                  checked={segmentTypes.includes(type)}
+                  onChange={() => toggleSegmentType(type)}
+                  label={SEGMENT_LABELS[type]}
+                  accent="var(--color-accent-en)"
+                />
+                {SEGMENT_HINTS[type] && <p className="text-xs text-text-muted mt-1.5">{SEGMENT_HINTS[type]}</p>}
+              </div>
+            ))}
+          </div>
+        )}
       </fieldset>
+
+      {needsLevel && (
+        <fieldset className="mb-6">
+          <legend className={SECTION_TITLE}>Nível das palavras</legend>
+          <div className="grid grid-cols-2 gap-3">
+            {wordLevels.map((level) => (
+              <Choice
+                key={level}
+                type="radio"
+                name="word-level"
+                checked={wordLevel === level}
+                onChange={() => edit({ wordLevel: level })}
+                label={WORD_LEVEL_LABELS[level]}
+                accent="var(--color-accent-en)"
+                center
+              />
+            ))}
+          </div>
+          {wordLevel && <p className="text-xs text-text-muted mt-1.5">{WORD_LEVEL_HINTS[wordLevel]}</p>}
+        </fieldset>
+      )}
 
       <fieldset className="mb-7">
         <legend className={SECTION_TITLE}>Densidade</legend>
         <div className="grid grid-cols-3 gap-3">
-          {DENSITIES.map((d) => (
+          {densities.map((d) => (
             <Choice
               key={d}
               type="radio"
@@ -232,7 +323,9 @@ export function AudioFilterPanel() {
 
       {!canSave && storyId !== null && (
         <p className="text-xs text-text-muted mb-3">
-          Escolha o idioma base e pelo menos um tipo de trecho para salvar.
+          {needsLevel
+            ? 'Escolha o idioma base, pelo menos um tipo de trecho e o nível das palavras para salvar.'
+            : 'Escolha o idioma base e pelo menos um tipo de trecho para salvar.'}
         </p>
       )}
 
@@ -249,7 +342,7 @@ export function AudioFilterPanel() {
         {save.isSuccess && unchanged && <span style={{ color: 'var(--color-accent-en)' }}>Filtro salvo.</span>}
         {save.isError && (
           <span role="alert" style={{ color: 'var(--color-accent-pt)' }}>
-            Não foi possível salvar o filtro. Tente novamente.
+            {saveErrorMessage(save.error)}
           </span>
         )}
       </div>
