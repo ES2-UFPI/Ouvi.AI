@@ -1,39 +1,71 @@
 import { describe, it, expect } from 'vitest'
-import { selectSwapIds } from './swaps'
+import { pickEvenly, selectSwapIds } from './swaps'
+import type { FilterRules } from '../filters/api'
 import type { StoryAnnotation, StorySegment } from '../stories/api'
 
-const annotation = (id: number): StoryAnnotation => ({
+const annotation = (id: number, overrides: Partial<StoryAnnotation> = {}): StoryAnnotation => ({
   id, kind: 'phrasal_verb', lemma: 'x',
-  en_start: 0, en_end: 1, en_text: 'x',
+  en_start: id, en_end: id + 1, en_text: 'x',
   pt_start: 0, pt_end: 1, pt_text: 'y', extra: {},
+  ...overrides,
 })
 
-const segmentWith = (ids: number[]): StorySegment => ({
-  id: 1, position: 0, text_en: 'a', text_pt: 'b', annotations: ids.map(annotation),
+const segmentWith = (annotations: StoryAnnotation[], position = 0): StorySegment => ({
+  id: position + 1, position, text_en: 'a', text_pt: 'b', annotations,
+})
+
+const scenarioA = (density: FilterRules['density']): FilterRules => ({
+  base_language: 'pt', segment_types: ['phrasal_verbs'], density,
+})
+
+describe('pickEvenly (mesma conta do backend)', () => {
+  it('troca 15%, 35% e 60% dos candidatos, espaçados', () => {
+    expect(pickEvenly(10, 'low')).toEqual([2, 7])
+    expect(pickEvenly(10, 'medium')).toEqual([1, 3, 6, 8])
+    expect(pickEvenly(10, 'high')).toEqual([0, 2, 4, 5, 7, 9])
+  })
+
+  it('troca pelo menos um quando há candidatos', () => {
+    expect(pickEvenly(1, 'low')).toEqual([0])
+    expect(pickEvenly(0, 'high')).toEqual([])
+  })
 })
 
 describe('selectSwapIds', () => {
-  const segments = [segmentWith([1, 2, 3, 4]), segmentWith([5, 6])]
+  const ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  const segments = [segmentWith(ids.slice(0, 6).map((id) => annotation(id))), segmentWith(ids.slice(6).map((id) => annotation(id)), 1)]
 
-  it('densidade alta troca todos', () => {
-    expect([...selectSwapIds(segments, 'high')]).toEqual([1, 2, 3, 4, 5, 6])
-  })
-
-  it('densidade média troca 2 de cada 3', () => {
-    expect([...selectSwapIds(segments, 'medium')]).toEqual([2, 3, 5, 6])
-  })
-
-  it('densidade baixa troca 1 de cada 3', () => {
-    expect([...selectSwapIds(segments, 'low')]).toEqual([3, 6])
+  it('Cenário A: escolhe os phrasal verbs pela densidade, na história inteira', () => {
+    expect([...selectSwapIds(segments, scenarioA('medium'))].sort((a, b) => a - b)).toEqual([2, 4, 7, 9])
   })
 
   it('ignora anotações sem equivalente em português', () => {
-    const semPt = { ...annotation(9), pt_start: null, pt_end: null, pt_text: null }
-    const seg = { ...segmentWith([1]), annotations: [semPt, annotation(1)] }
-    expect([...selectSwapIds([seg], 'high')]).toEqual([1])
+    const semPt = annotation(9, { pt_start: null, pt_end: null, pt_text: null })
+    expect([...selectSwapIds([segmentWith([semPt, annotation(1)])], scenarioA('high'))]).toEqual([1])
+  })
+
+  it('Cenário A ignora palavras difíceis', () => {
+    const palavra = annotation(2, { kind: 'difficult_word', extra: { level: 'advanced' } })
+    expect([...selectSwapIds([segmentWith([annotation(1), palavra])], scenarioA('high'))]).toEqual([1])
+  })
+
+  it('Cenário B: nível intermediário considera as duas faixas; avançado só as raras', () => {
+    const palavras = [
+      annotation(1, { kind: 'difficult_word', extra: { level: 'intermediate' } }),
+      annotation(2, { kind: 'difficult_word', extra: { level: 'advanced' } }),
+      annotation(3, { kind: 'phrasal_verb' }),
+    ]
+    const rules = (word_level: 'intermediate' | 'advanced'): FilterRules => ({
+      base_language: 'en', segment_types: ['difficult_words'], density: 'high', word_level,
+    })
+    // 60% de 2 candidatos = 1 (o do meio da faixa)
+    expect([...selectSwapIds([segmentWith(palavras)], rules('intermediate'))]).toEqual([2])
+    expect([...selectSwapIds([segmentWith(palavras)], rules('advanced'))]).toEqual([2])
+    expect(selectSwapIds([segmentWith(palavras.slice(0, 1))], rules('advanced')).size).toBe(0)
+    expect([...selectSwapIds([segmentWith(palavras.slice(0, 1))], rules('intermediate'))]).toEqual([1])
   })
 
   it('sem anotações devolve conjunto vazio', () => {
-    expect(selectSwapIds([], 'high').size).toBe(0)
+    expect(selectSwapIds([], scenarioA('high')).size).toBe(0)
   })
 })

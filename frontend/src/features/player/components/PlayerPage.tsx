@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { getFilter } from '../../filters/api'
-import { DENSITY_LABELS, LANGUAGE_LABELS, SEGMENT_LABELS } from '../../filters/labels'
+import { DENSITY_LABELS, LANGUAGE_LABELS, SEGMENT_LABELS, WORD_LEVEL_LABELS } from '../../filters/labels'
 import { PageLayout } from '../../../shared/components/PageLayout'
 import { getStorySegments, listStories } from '../../stories/api'
 import { useGeneratedAudio } from '../hooks/useGeneratedAudio'
@@ -49,7 +49,7 @@ function PlayerPageContent() {
   const rules = filter.data?.rules
 
   const swapIds = useMemo(
-    () => (rules && segments.data ? selectSwapIds(segments.data.segments, rules.density) : new Set<number>()),
+    () => (rules && segments.data ? selectSwapIds(segments.data.segments, rules) : new Set<number>()),
     [rules, segments.data],
   )
 
@@ -58,6 +58,7 @@ function PlayerPageContent() {
     ? [
       `Base: ${LANGUAGE_LABELS[rules.base_language]}`,
       ...rules.segment_types.map((t) => SEGMENT_LABELS[t]),
+      ...(rules.word_level ? [`Nível ${WORD_LEVEL_LABELS[rules.word_level].toLowerCase()}`] : []),
       `Densidade ${DENSITY_LABELS[rules.density].toLowerCase()}`,
     ]
     : []

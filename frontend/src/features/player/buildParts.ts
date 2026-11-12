@@ -3,6 +3,8 @@ import type { StorySegment } from '../stories/api'
 export interface TextPart {
   text: string
   swapped: boolean
+  // Só nos trechos trocados: o texto que estava no idioma base (mostrado na dica e na lista "Nesta frase")
+  original?: string
 }
 
 export function buildParts(
@@ -30,7 +32,7 @@ export function buildParts(
   for (const span of spans) {
     if (span.start < cursor) continue // sobreposição: ignora
     if (span.start > cursor) parts.push({ text: base.slice(cursor, span.start), swapped: false })
-    parts.push({ text: span.replacement, swapped: true })
+    parts.push({ text: span.replacement, swapped: true, original: base.slice(span.start, span.end) })
     cursor = span.end
   }
   if (cursor < base.length) parts.push({ text: base.slice(cursor), swapped: false })

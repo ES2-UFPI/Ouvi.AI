@@ -11,6 +11,8 @@ interface BilingualTextProps {
   activeSegmentId?: number | null
 }
 
+const LANGUAGE_NAMES: Record<BaseLanguage, string> = { pt: 'português', en: 'inglês' }
+
 export function BilingualText({ segments, baseLanguage, swapIds, activeSegmentId = null }: BilingualTextProps) {
   const activeRef = useRef<HTMLParagraphElement | null>(null)
 
@@ -23,12 +25,26 @@ export function BilingualText({ segments, baseLanguage, swapIds, activeSegmentId
   const swappedLanguage = baseLanguage === 'pt' ? 'en' : 'pt'
   const accent = swappedLanguage === 'en' ? 'var(--color-accent-en)' : 'var(--color-accent-pt)'
 
+  // Glossário da frase atual: cada trecho trocado e o que foi falado no lugar dele
+  const activeSegment = segments.find((s) => s.id === activeSegmentId)
+  const activeSwaps = activeSegment
+    ? buildParts(activeSegment, baseLanguage, swapIds).filter((part) => part.swapped)
+    : []
+
   return (
     <section
       aria-label="Texto da história com os trechos trocados"
       className="rounded-2xl bg-bg-surface border border-border-subtle p-7 shadow-2xl shadow-black/40 mt-6"
     >
-      <div className="max-h-80 overflow-y-auto pr-2 space-y-3 text-text-primary leading-relaxed">
+      <p className="flex items-center gap-2 text-xs text-text-muted mb-4">
+        <span
+          aria-hidden="true"
+          className="inline-block w-3 h-3 rounded"
+          style={{ backgroundColor: `color-mix(in srgb, ${accent} 28%, transparent)`, boxShadow: `inset 0 -2px 0 ${accent}` }}
+        />
+        Trechos falados em {LANGUAGE_NAMES[swappedLanguage]}
+      </p>
+      <div lang={baseLanguage} className="max-h-80 overflow-y-auto pr-2 space-y-3 text-text-primary leading-relaxed">
         {segments.map((segment) => (
           <p
             key={segment.id}
@@ -46,6 +62,7 @@ export function BilingualText({ segments, baseLanguage, swapIds, activeSegmentId
                 <mark
                   key={i}
                   lang={swappedLanguage}
+                  title={`Em ${LANGUAGE_NAMES[baseLanguage]}: ${part.original}`}
                   className="rounded px-1 text-text-primary"
                   style={{
                     backgroundColor: `color-mix(in srgb, ${accent} 28%, transparent)`,
@@ -61,6 +78,22 @@ export function BilingualText({ segments, baseLanguage, swapIds, activeSegmentId
           </p>
         ))}
       </div>
+      {activeSwaps.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-border-subtle">
+          <p className="text-xs uppercase tracking-wider text-text-muted mb-2">Nesta frase</p>
+          <ul aria-label="Nesta frase" className="space-y-1 text-sm text-text-primary">
+            {activeSwaps.map((part, i) => (
+              <li key={i}>
+                <span lang={baseLanguage}>{part.original}</span>
+                <span className="text-text-muted"> → </span>
+                <span lang={swappedLanguage} style={{ color: accent }}>
+                  {part.text}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   )
 }

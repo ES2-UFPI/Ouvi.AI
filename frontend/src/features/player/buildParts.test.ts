@@ -19,7 +19,7 @@ describe('buildParts', () => {
   it('troca o trecho no idioma base português', () => {
     expect(buildParts(segment, 'pt', new Set([10]))).toEqual([
       { text: 'Ele ', swapped: false },
-      { text: 'put on', swapped: true },
+      { text: 'put on', swapped: true, original: 'vestiu' },
       { text: ' o casaco.', swapped: false },
     ])
   })
@@ -27,7 +27,7 @@ describe('buildParts', () => {
   it('troca o trecho no idioma base inglês', () => {
     expect(buildParts(segment, 'en', new Set([10]))).toEqual([
       { text: 'He ', swapped: false },
-      { text: 'vestiu', swapped: true },
+      { text: 'vestiu', swapped: true, original: 'put on' },
       { text: ' his coat.', swapped: false },
     ])
   })
