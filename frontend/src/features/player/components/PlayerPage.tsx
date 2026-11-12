@@ -3,13 +3,20 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { getFilter } from '../../filters/api'
-import { DENSITY_LABELS, LANGUAGE_LABELS, SEGMENT_LABELS, WORD_LEVEL_LABELS } from '../../filters/labels'
+import {
+  DENSITY_LABELS,
+  LANGUAGE_LABELS,
+  PROGRESSION_LABELS,
+  SEGMENT_LABELS,
+  WORD_LEVEL_LABELS,
+} from '../../filters/labels'
 import { PageLayout } from '../../../shared/components/PageLayout'
 import { getStorySegments, listStories } from '../../stories/api'
 import { useGeneratedAudio } from '../hooks/useGeneratedAudio'
 import { AudioPlayer } from './AudioPlayer'
-import { selectSwapIds } from '../swaps'
+import { densityPhases, segmentPhases, selectSwapIds } from '../swaps'
 import { BilingualText } from './BilingualText'
+import { DensityIndicator } from './DensityIndicator'
 
 export function PlayerPage() {
   const { storyId } = useParams<{ storyId: string }>()
@@ -52,6 +59,17 @@ function PlayerPageContent() {
     () => (rules && segments.data ? selectSwapIds(segments.data.segments, rules) : new Set<number>()),
     [rules, segments.data],
   )
+  // Indicador de densidade: quanto muda de idioma em cada terço da história e em qual terço o áudio está
+  const phases = useMemo(
+    () => (rules && segments.data ? densityPhases(segments.data.segments, rules, swapIds) : null),
+    [rules, segments.data, swapIds],
+  )
+  const phaseBySegment = useMemo(
+    () => (segments.data ? segmentPhases(segments.data.segments) : new Map<number, number>()),
+    [segments.data],
+  )
+  const currentSegmentId = audio.current?.segment_id ?? null
+  const currentPhase = currentSegmentId !== null ? (phaseBySegment.get(currentSegmentId) ?? null) : null
 
   // Resumo do filtro escolhido, mostrado como etiquetas no topo do player
   const chips = rules
@@ -60,6 +78,7 @@ function PlayerPageContent() {
       ...rules.segment_types.map((t) => SEGMENT_LABELS[t]),
       ...(rules.word_level ? [`Nível ${WORD_LEVEL_LABELS[rules.word_level].toLowerCase()}`] : []),
       `Densidade ${DENSITY_LABELS[rules.density].toLowerCase()}`,
+      ...(rules.progression === 'increasing' ? [PROGRESSION_LABELS.increasing] : []),
     ]
     : []
 
@@ -150,6 +169,14 @@ function PlayerPageContent() {
             </p>
           )}
         </div>
+      )}
+      {rules && phases && (
+        <DensityIndicator
+          density={rules.density}
+          progression={rules.progression ?? 'constant'}
+          phases={phases}
+          currentPhase={showPlayer ? currentPhase : null}
+        />
       )}
       {rules && segments.data && (
         <BilingualText

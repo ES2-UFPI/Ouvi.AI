@@ -190,6 +190,30 @@ describe('PlayerPage', () => {
     expect(screen.getByText('Frase 1.').closest('p')).not.toHaveAttribute('aria-current')
   })
 
+  it('mostra o indicador de densidade crescente e acompanha o terço da história que está tocando', async () => {
+    vi.mocked(filtersApi.getFilter).mockResolvedValue({
+      id: 7,
+      story_id: 1,
+      rules: { base_language: 'pt', segment_types: ['advanced_vocabulary'], density: 'high', progression: 'increasing' },
+      created_at: '',
+      updated_at: '',
+    })
+    vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready', 'ready', 'ready']))
+    const { container } = renderPlayer()
+    await screen.findByLabelText('Reproduzir')
+
+    expect(screen.getByText('Vocabulário avançado')).toBeInTheDocument()
+    expect(screen.getByText('Crescente')).toBeInTheDocument()
+    const indicador = await screen.findByRole('region', { name: 'Indicador de densidade' })
+    expect(indicador).toHaveTextContent('Início: 30%')
+    expect(indicador).toHaveTextContent('Meio: 60%')
+    expect(indicador).toHaveTextContent('Fim: 90%')
+    expect(await screen.findByText(/Agora: início da história/)).toBeInTheDocument()
+
+    fireEvent(audioDe(container), new Event('ended'))
+    expect(await screen.findByText(/Agora: meio da história, 60% das trocas possíveis/)).toBeInTheDocument()
+  })
+
   it('mostra o resumo do filtro escolhido', async () => {
     vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready']))
     renderPlayer()
