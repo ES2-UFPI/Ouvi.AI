@@ -6,20 +6,21 @@ e a prévia do texto usam `select_swaps` e `compose`, para o que o usuário vê 
 from app.modules.audio.composer.composer import AudioComposer
 from app.modules.audio.composer.density import (
     DENSITY_SHARE,
-    PHASE_WEIGHTS,
-    PROGRESSION_CONSTANT,
+    PROGRESSION_FIXED,
     PROGRESSION_INCREASING,
     PROGRESSIONS,
+    DensityCurve,
 )
 from app.modules.audio.composer.strategies import (
     AdvancedVocabularyStrategy,
     DifficultWordStrategy,
     PhrasalVerbStrategy,
     SwapStrategy,
+    StoryPositions,
     SwapStrategyFactory,
     UnknownSwapStrategyError,
 )
-from app.modules.audio.composer.swap import ComposedText, Swap
+from app.modules.audio.composer.swap import ComposedText, SentenceDensity, Swap
 
 __all__ = [
     "AdvancedVocabularyStrategy",
@@ -27,13 +28,15 @@ __all__ = [
     "ComposedText",
     "DENSITY_SHARE",
     "DifficultWordStrategy",
-    "PHASE_WEIGHTS",
+    "DensityCurve",
     "PROGRESSIONS",
-    "PROGRESSION_CONSTANT",
+    "PROGRESSION_FIXED",
     "PROGRESSION_INCREASING",
     "PhrasalVerbStrategy",
+    "SentenceDensity",
     "Swap",
     "SwapStrategy",
     "SwapStrategyFactory",
+    "StoryPositions",
     "UnknownSwapStrategyError",
 ]

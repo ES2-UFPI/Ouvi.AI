@@ -23,3 +23,14 @@ class ComposedText:
     ssml: str  # <speak> com <lang> nos trechos trocados; vai ao TTS (sem <voice>: quem põe é o adaptador)
     text: str  # o texto exibido, no idioma base, sem nenhuma marcação
     swaps: list[Swap]  # em ordem de posição
+
+
+@dataclass(frozen=True)
+class SentenceDensity:
+    """Densidade de uma frase (perfil devolvido pela prévia, US11)."""
+
+    segment_id: int
+    position: int
+    candidates: int  # trechos da frase que podem ser trocados
+    swapped: int  # trechos de fato trocados no SSML da frase
+    target: float  # fração-alvo de trocas nesta altura da história (0 a 1): a curva, ou a densidade fixa

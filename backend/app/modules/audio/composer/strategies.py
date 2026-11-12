@@ -1,8 +1,9 @@
 """Estratégias de troca (Strategy) e a fábrica que escolhe a estratégia pelo tipo de trecho do filtro."""
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
-from app.modules.audio.composer.density import pick_evenly, pick_increasing
+from app.modules.audio.composer.density import DensityCurve, pick_evenly
 from app.modules.stories.models import KIND_DIFFICULT_WORD, KIND_PHRASAL_VERB
 from app.modules.stories.nlp.levels import LEVEL_ADVANCED, LEVEL_INTERMEDIATE, levels_for_filter
 
@@ -14,15 +15,23 @@ class UnknownSwapStrategyError(ValueError):
     """O filtro pede um tipo de trecho para o qual não existe estratégia de troca."""
 
 
+@dataclass(frozen=True)
+class StoryPositions:
+    """Frase de cada anotação na história ordenada, para a curva de densidade crescente (US11)."""
+
+    sentence_of: Mapping[int, int]  # id da anotação -> índice da frase (0 a total - 1)
+    total: int  # número de frases da história
+
+
 class SwapStrategy(Protocol):
     kind: str  # tipo de ANOTAÇÃO que a estratégia escolhe (no filtro o tipo tem outro nome)
 
     def select(
-        self, annotations: "Sequence[Annotation]", density: str, phases: Mapping[int, int] | None = None
+        self, annotations: "Sequence[Annotation]", density: str, positions: StoryPositions | None = None
     ) -> set[int]:
         """Ids das anotações que serão trocadas. Recebe as anotações da história inteira, em ordem de aparição.
 
-        `phases` (id da anotação -> terço da história) liga a densidade crescente; sem ele, ela é constante.
+        `positions` liga a densidade crescente (`DensityCurve`); sem ele, a densidade é fixa.
         """
         ...
 
@@ -32,12 +41,13 @@ def is_aligned(annotation: "Annotation") -> bool:
     return annotation.pt_start is not None and annotation.pt_end is not None and annotation.pt_text is not None
 
 
-def pick(candidates: "Sequence[Annotation]", density: str, phases: Mapping[int, int] | None) -> set[int]:
-    """Aplica a densidade (constante ou crescente) sobre os candidatos, em ordem de aparição."""
-    if phases is None:
+def pick(candidates: "Sequence[Annotation]", density: str, positions: StoryPositions | None) -> set[int]:
+    """Aplica a densidade (fixa ou crescente) sobre os candidatos, em ordem de aparição."""
+    if positions is None:
         indices = pick_evenly(len(candidates), density)
     else:
-        indices = pick_increasing([phases[a.id] for a in candidates], density)
+        sentences = [positions.sentence_of[a.id] for a in candidates]
+        indices = DensityCurve(density).select(sentences, positions.total)
     return {candidates[i].id for i in indices}
 
 
@@ -48,10 +58,10 @@ class PhrasalVerbStrategy:
     kind = KIND_PHRASAL_VERB
 
     def select(
-        self, annotations: "Sequence[Annotation]", density: str, phases: Mapping[int, int] | None = None
+        self, annotations: "Sequence[Annotation]", density: str, positions: StoryPositions | None = None
     ) -> set[int]:
         candidates = [a for a in annotations if a.kind == self.kind and is_aligned(a)]
-        return pick(candidates, density, phases)
+        return pick(candidates, density, positions)
 
 
 class DifficultWordStrategy:
@@ -66,14 +76,14 @@ class DifficultWordStrategy:
         self.levels = levels_for_filter(word_level or LEVEL_INTERMEDIATE)
 
     def select(
-        self, annotations: "Sequence[Annotation]", density: str, phases: Mapping[int, int] | None = None
+        self, annotations: "Sequence[Annotation]", density: str, positions: StoryPositions | None = None
     ) -> set[int]:
         candidates = [
             a
             for a in annotations
             if a.kind == self.kind and is_aligned(a) and (a.extra or {}).get("level") in self.levels
         ]
-        return pick(candidates, density, phases)
+        return pick(candidates, density, positions)
 
 
 class AdvancedVocabularyStrategy(DifficultWordStrategy):

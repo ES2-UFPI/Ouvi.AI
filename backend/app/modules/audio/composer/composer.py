@@ -4,14 +4,14 @@ Não usa rede, banco nem TTS: recebe frases e anotações e devolve texto, o que
 O mesmo código serve a qualquer direção: com o português como base, os trechos são falados em inglês;
 com o inglês como base (Cenário B), os trechos são falados em português.
 """
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from xml.sax.saxutils import escape
 
-from app.modules.audio.composer.density import PROGRESSION_INCREASING, check_progression, phase_of
-from app.modules.audio.composer.strategies import SwapStrategyFactory, is_aligned
-from app.modules.audio.composer.swap import ComposedText, Swap
+from app.modules.audio.composer.density import PROGRESSION_INCREASING, check_progression, sentence_target
+from app.modules.audio.composer.strategies import StoryPositions, SwapStrategyFactory, is_aligned
+from app.modules.audio.composer.swap import ComposedText, SentenceDensity, Swap
 
 if TYPE_CHECKING:
     from app.modules.stories.models import Annotation, Segment
@@ -54,8 +54,8 @@ class AudioComposer:
         """Ids das anotações que serão trocadas, calculados sobre a HISTÓRIA INTEIRA.
 
         `word_level` é o nível das palavras difíceis (filtro do Cenário B); os outros tipos o ignoram.
-        `progression` (US11): `increasing` aplica a curva de densidade crescente por terço da história;
-        ausente ou `constant`, a densidade é a mesma do começo ao fim.
+        `progression` (US11): `increasing` aplica a curva de densidade crescente (`DensityCurve`), com
+        `density` como a densidade FINAL; ausente ou `fixed`, a densidade é a mesma do começo ao fim.
 
         A prévia e a geração de áudio devem usar esta mesma função: assim o que o usuário vê é o que ele ouve.
         """
@@ -67,19 +67,22 @@ class AudioComposer:
             for segment in ordered_segments
             for annotation in sorted(segment.annotations, key=lambda a: (a.en_start, a.id))
         ]
-        # Terço da história de cada anotação, pela posição da sua frase (só na densidade crescente)
-        phases = (
-            {
-                annotation.id: phase_of(index, len(ordered_segments))
-                for index, segment in enumerate(ordered_segments)
-                for annotation in segment.annotations
-            }
+        # Frase de cada anotação na história ordenada (só a densidade crescente usa a posição)
+        positions = (
+            StoryPositions(
+                sentence_of={
+                    annotation.id: index
+                    for index, segment in enumerate(ordered_segments)
+                    for annotation in segment.annotations
+                },
+                total=len(ordered_segments),
+            )
             if increasing
             else None
         )
         selected: set[int] = set()
         for segment_type in segment_types:
-            selected |= SwapStrategyFactory.create(segment_type, word_level).select(ordered, density, phases)
+            selected |= SwapStrategyFactory.create(segment_type, word_level).select(ordered, density, positions)
         return selected
 
     def count_candidates(
@@ -89,6 +92,12 @@ class AudioComposer:
 
         Com palavras difíceis, só contam as do nível do filtro (as mesmas que a estratégia considera).
         """
+        return sum(self.candidates_per_segment(segments, segment_types, word_level).values())
+
+    def candidates_per_segment(
+        self, segments: "Iterable[Segment]", segment_types: Sequence[str], word_level: str | None = None
+    ) -> dict[int, int]:
+        """Candidatos de cada frase (id da frase -> quantidade), com as mesmas regras de `count_candidates`."""
         strategies = [SwapStrategyFactory.create(segment_type, word_level) for segment_type in segment_types]
 
         def candidate(a: "Annotation") -> bool:
@@ -98,7 +107,33 @@ class AudioComposer:
                     return True
             return False
 
-        return sum(1 for s in segments for a in s.annotations if candidate(a))
+        return {s.id: sum(1 for a in s.annotations if candidate(a)) for s in segments}
+
+    def density_profile(
+        self,
+        segments: "Iterable[Segment]",
+        swapped: Mapping[int, int],
+        segment_types: Sequence[str],
+        density: str,
+        word_level: str | None = None,
+        progression: str | None = None,
+    ) -> list[SentenceDensity]:
+        """Perfil de densidade por frase, em ordem de posição: candidatos, trocas feitas e a fração-alvo.
+
+        `swapped` (id da frase -> trocas) vem do SSML já composto: assim o perfil bate com o que é falado.
+        """
+        ordered = sorted(segments, key=lambda s: s.position)
+        candidates = self.candidates_per_segment(ordered, segment_types, word_level)
+        return [
+            SentenceDensity(
+                segment_id=segment.id,
+                position=segment.position,
+                candidates=candidates[segment.id],
+                swapped=swapped.get(segment.id, 0),
+                target=sentence_target(density, progression, index, len(ordered)),
+            )
+            for index, segment in enumerate(ordered)
+        ]
 
     def compose(self, segment: "Segment", selected: Collection[int], base_language: str) -> ComposedText:
         """Monta o SSML da frase, trocando só as anotações cujos ids estão em `selected`."""
