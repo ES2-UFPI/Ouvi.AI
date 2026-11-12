@@ -287,6 +287,23 @@ Dois pedidos simultâneos da mesma frase nova fazem uma única chamada ao TTS: u
 (`pg_advisory_xact_lock`) por chave faz o segundo esperar o primeiro e encontrar o blob pronto. O log mostra os
 acertos e erros de cada frase e, no fim, o total de caracteres economizados.
 
+Comandos (rode dentro de `backend/`):
+
+```bash
+# Estatísticas: arquivos, tamanho, acertos, erros, taxa de acerto, caracteres economizados e custo evitado
+python -m app.modules.audio.cache stats          # --json para a mesma informação em JSON
+# Limpeza: sem opções não apaga nada; --dry-run só mostra o relatório
+python -m app.modules.audio.cache purge --older-than 30 --dry-run   # sem uso há mais de 30 dias
+python -m app.modules.audio.cache purge --max-size 500MB            # os menos usados até caber em 500 MB
+```
+
+- O custo evitado usa `TTS_COST_PER_1K_CHARS` (preço do fornecedor por 1.000 caracteres; padrão `0`, e então o
+  custo aparece zerado). O `stats` só lê o banco. Os contadores são do cache atual: um blob apagado pela limpeza
+  leva os seus junto.
+- A limpeza devolve para `pending` os áudios de frase que usavam o blob (gerar de novo recria o áudio), apaga o
+  registro e só depois apaga o arquivo. Se apagar o arquivo falhar, sobra um arquivo órfão, nunca um registro
+  apontando para um arquivo inexistente.
+
 ## Provedor de TTS (síntese de voz)
 
 A voz é gerada por um provedor de TTS escolhido por configuração. O código usa sempre a interface `TTSProvider`

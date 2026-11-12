@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     tts_region: str = ""
     # Voz usada na síntese. O provedor falso ignora; no fornecedor real, é o nome da voz
     tts_voice_id: str = "fake-voice"
+    # Preço do fornecedor por 1.000 caracteres, só para a estimativa de custo evitado pelo cache de áudio
+    # (`python -m app.modules.audio.cache stats`). 0 = não definido: o custo evitado aparece zerado
+    tts_cost_per_1k_chars: float = 0.0
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
