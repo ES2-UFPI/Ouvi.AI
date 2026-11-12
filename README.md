@@ -256,6 +256,25 @@ Resposta do `POST` e do `status`:
 em falha; um novo `POST` tenta de novo só as que falharam). `status` de cada frase: `pending`, `generating`, `ready`
 ou `failed`.
 
+## Cache de áudio (US08)
+
+O TTS cobra por caractere, então o mesmo conteúdo é sintetizado **uma única vez**, para qualquer filtro e
+qualquer usuário. A identidade de um arquivo é a **chave de cache** (`backend/app/modules/audio/cache/key.py`):
+
+```python
+build_cache_key(ssml, voice_id, provider, audio_format)  # SHA-256 em hexadecimal (64 caracteres)
+```
+
+- Entram o SSML **normalizado** (espaços repetidos fora das tags viram um só; os das pontas saem), a voz, o
+  fornecedor do TTS, o formato do áudio e a `CACHE_KEY_VERSION`. O idioma está no próprio SSML (`xml:lang`).
+- Não entram usuário, filtro nem história: uma frase sem troca de idioma tem o mesmo SSML em qualquer filtro.
+- Mudar o texto, as trocas, o idioma, a voz, o fornecedor ou o formato gera outra chave, e portanto outro áudio.
+- Mudou a forma de calcular a chave? Suba a `CACHE_KEY_VERSION`: as chaves antigas deixam de bater.
+
+Cada arquivo do cache é um registro `AudioBlob` (tabela `audio_blobs`: chave única, chave do arquivo no
+armazenamento, formato, duração, tamanho, caracteres, acertos, erros, criação e último uso). O `AudioAsset` de
+cada frase aponta para o blob pela coluna `blob_id`.
+
 ## Provedor de TTS (síntese de voz)
 
 A voz é gerada por um provedor de TTS escolhido por configuração. O código usa sempre a interface `TTSProvider`
