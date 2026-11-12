@@ -1,8 +1,9 @@
 """Fábrica de detectores (Factory Method): escolhe a estratégia pelo tipo de trecho."""
 from collections.abc import Callable
 
-from app.modules.stories.models import KIND_PHRASAL_VERB
+from app.modules.stories.models import KIND_DIFFICULT_WORD, KIND_PHRASAL_VERB
 from app.modules.stories.nlp.base import AnnotationDetector, UnknownDetectorError
+from app.modules.stories.nlp.difficult_words import DifficultWordDetector
 from app.modules.stories.nlp.phrasal_verbs import PhrasalVerbDetector
 
 
@@ -10,6 +11,7 @@ class DetectorFactory:
     # Um novo tipo de trecho (palavras difíceis, vocabulário avançado) entra aqui com uma linha
     _registry: dict[str, Callable[[], AnnotationDetector]] = {
         KIND_PHRASAL_VERB: PhrasalVerbDetector,
+        KIND_DIFFICULT_WORD: DifficultWordDetector,
     }
 
     @classmethod

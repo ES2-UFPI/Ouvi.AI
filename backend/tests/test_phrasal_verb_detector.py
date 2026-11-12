@@ -140,7 +140,7 @@ def test_fabrica_cria_o_detector_pelo_tipo():
     detector = DetectorFactory.create("phrasal_verb")
     assert isinstance(detector, PhrasalVerbDetector)
     assert detector.kind == "phrasal_verb"
-    assert DetectorFactory.kinds() == ["phrasal_verb"]
+    assert "phrasal_verb" in DetectorFactory.kinds()
 
 
 def test_fabrica_levanta_erro_claro_para_tipo_desconhecido():
