@@ -117,7 +117,9 @@ def test_valores_exatos_espelhados_no_front():
     candidatos = list(range(30))
     assert DensityCurve("low").select(candidatos, 30) == [9, 20, 28]
     assert DensityCurve("medium").select(candidatos, 30) == [5, 11, 16, 20, 24, 27]
+    assert DensityCurve("high").select(candidatos, 30) == [3, 8, 11, 14, 17, 19, 21, 24, 25, 27, 29]
     assert tercos(candidatos, DensityCurve("high").select(candidatos, 30), 30) == [2, 4, 5]
+    assert DensityCurve("high").select([0, 0, 1, 2], 3) == [2]
 
 
 # ---------- casos-limite ----------

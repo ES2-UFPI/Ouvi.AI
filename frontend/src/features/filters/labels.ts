@@ -15,17 +15,15 @@ export const SEGMENT_HINTS: Partial<Record<SegmentType, string>> = {
   difficult_words:
     'História em inglês; as palavras difíceis são faladas em português. Ex.: "The fox was famished (faminta)."',
   advanced_vocabulary:
-    'História em português; as palavras raras são faladas em inglês. Ex.: "A raposa estava faminta (famished)."',
+    'História em português; as palavras raras são faladas em inglês, cada vez mais até o final. Ex.: "A raposa estava faminta (famished)."',
 }
 export const WORD_LEVEL_HINTS: Record<WordLevel, string> = {
   intermediate: 'Troca as palavras pouco frequentes e as raras.',
   advanced: 'Troca só as palavras raras (menos trocas).',
 }
 
-export const PROGRESSION_LABELS: Record<Progression, string> = { constant: 'Constante', increasing: 'Crescente' }
+export const PROGRESSION_LABELS: Record<Progression, string> = { fixed: 'Fixa', increasing: 'Crescente' }
 export const PROGRESSION_HINTS: Record<Progression, string> = {
-  constant: 'A mesma proporção de trocas do começo ao fim da história.',
-  increasing: 'Começa com poucas trocas e aumenta até o final: metade da densidade no início, uma vez e meia no fim.',
+  fixed: 'A mesma proporção de trocas do começo ao fim da história.',
+  increasing: 'Poucas palavras em inglês no começo e cada vez mais até o final, onde chega à densidade escolhida.',
 }
-// Nome de cada terço da história na densidade crescente (swaps.ts: PHASE_WEIGHTS)
-export const PHASE_LABELS = ['Início', 'Meio', 'Fim'] as const

@@ -3,7 +3,7 @@ import axios from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { ChevronDown, Headphones, SlidersHorizontal } from 'lucide-react'
-import { listStories } from '../../stories/api'
+import { getStoryPreview, listStories, type StoryPreview } from '../../stories/api'
 import {
   createFilter,
   getFilterOptions,
@@ -14,7 +14,7 @@ import {
   type FilterOptions,
   type FilterPayload,
   type FilterRules,
-  type Progression,
+  type Scenario,
   type SegmentType,
   type WordLevel,
 } from '../api'
@@ -22,28 +22,35 @@ import {
   DENSITY_LABELS,
   LANGUAGE_LABELS,
   PROGRESSION_HINTS,
-  PROGRESSION_LABELS,
   SEGMENT_HINTS,
   SEGMENT_LABELS,
   WORD_LEVEL_HINTS,
   WORD_LEVEL_LABELS,
 } from '../labels'
+import { DensityCurve } from './DensityCurve'
 
 // Cópia da tabela do backend, usada só enquanto GET /filters/options não responde (ou se ele falhar)
 const FALLBACK_OPTIONS: FilterOptions = {
   scenarios: [
-    { base_language: 'pt', segment_types: ['phrasal_verbs'], word_levels: [], description: '' },
+    { base_language: 'pt', segment_types: ['phrasal_verbs'], word_levels: [], progressions: ['fixed'], description: '' },
     {
       base_language: 'en',
       segment_types: ['difficult_words'],
       word_levels: ['intermediate', 'advanced'],
+      progressions: ['fixed'],
       description: '',
     },
-    { base_language: 'pt', segment_types: ['advanced_vocabulary'], word_levels: [], description: '' },
+    {
+      base_language: 'pt',
+      segment_types: ['advanced_vocabulary'],
+      word_levels: [],
+      progressions: ['increasing'],
+      description: '',
+    },
   ],
   densities: ['low', 'medium', 'high'],
   word_levels: ['intermediate', 'advanced'],
-  progressions: ['constant', 'increasing'],
+  progressions: ['fixed', 'increasing'],
 }
 
 // Mensagens da API (422) em português; o Pydantic começa cada uma com "Value error, "
@@ -107,21 +114,45 @@ interface FormValues {
   segmentTypes: SegmentType[]
   density: Density
   wordLevel: WordLevel | null
-  progression: Progression
 }
 
 // Começa vazio de propósito: o usuário precisa escolher o idioma base e o tipo de trecho
-const EMPTY_FORM: FormValues = {
-  baseLanguage: null,
-  segmentTypes: [],
-  density: 'medium',
-  wordLevel: null,
-  progression: 'constant',
-}
+const EMPTY_FORM: FormValues = { baseLanguage: null, segmentTypes: [], density: 'medium', wordLevel: null }
 
-// Um idioma base pode ter mais de um cenário (A e C são em português): a tela oferece a união deles
+// Um idioma base pode ter mais de um cenário (A e C são em português): a tela oferece a união dos tipos,
+// mas um filtro usa um cenário só (a API recusa misturar)
 function unique<T>(items: T[]): T[] {
   return items.filter((item, i) => items.indexOf(item) === i)
+}
+
+// O cenário que aceita todos os tipos escolhidos (null se nenhum foi escolhido ou se são de cenários diferentes)
+function scenarioFor(scenarios: Scenario[], types: SegmentType[]): Scenario | null {
+  if (types.length === 0) return null
+  return scenarios.find((s) => types.every((t) => s.segment_types.includes(t))) ?? null
+}
+
+// Exemplo do começo e do fim da história, tirado da prévia: a primeira e a última frase com troca
+function examples(preview: StoryPreview) {
+  const withSwaps = preview.segments.filter((s) => s.swaps.length > 0)
+  if (withSwaps.length < 2) return null
+  return { first: withSwaps[0], last: withSwaps[withSwaps.length - 1] }
+}
+
+// A frase com as palavras trocadas em destaque e o que é falado em inglês entre parênteses
+function ExampleSentence({ segment }: { segment: StoryPreview['segments'][number] }) {
+  const parts: React.ReactNode[] = []
+  let cursor = 0
+  for (const swap of segment.swaps) {
+    parts.push(segment.text.slice(cursor, swap.start))
+    parts.push(
+      <strong key={swap.annotation_id} style={{ color: 'var(--color-accent-en)' }}>
+        {swap.spoken}
+      </strong>,
+    )
+    cursor = swap.end
+  }
+  parts.push(segment.text.slice(cursor))
+  return <>{parts}</>
 }
 
 export function AudioFilterPanel() {
@@ -135,8 +166,6 @@ export function AudioFilterPanel() {
   // A tela só oferece as combinações que a API aceita
   const options = useQuery({ queryKey: ['filter-options'], queryFn: getFilterOptions, staleTime: Infinity })
   const { scenarios, densities } = options.data ?? FALLBACK_OPTIONS
-  // Uma API antiga (sem o campo) só conhece a densidade constante
-  const progressions = options.data?.progressions ?? FALLBACK_OPTIONS.progressions
   const languages = unique(scenarios.map((s) => s.base_language))
 
   const storyId = selectedStory ?? stories.data?.[0]?.id ?? null
@@ -148,18 +177,24 @@ export function AudioFilterPanel() {
         segmentTypes: saved.rules.segment_types,
         density: saved.rules.density,
         wordLevel: saved.rules.word_level ?? null,
-        progression: saved.rules.progression ?? 'constant',
       }
     : EMPTY_FORM
-  const { baseLanguage, segmentTypes, density, wordLevel, progression } = draft ?? savedForm
+  const { baseLanguage, segmentTypes, density, wordLevel } = draft ?? savedForm
   const languageScenarios = scenarios.filter((s) => s.base_language === baseLanguage)
-  // Só os tipos (e níveis) dos cenários do idioma base escolhido
+  // Só os tipos dos cenários do idioma base escolhido
   const allowedTypes = unique(languageScenarios.flatMap((s) => s.segment_types))
-  const wordLevels = unique(languageScenarios.flatMap((s) => s.word_levels))
+  // Um filtro antigo pode ter um tipo que o cenário não aceita mais: esse tipo não conta nem é enviado
+  const validTypes = segmentTypes.filter((t) => allowedTypes.includes(t))
+  const scenario = scenarioFor(languageScenarios, validTypes)
+  // Antes de escolher o tipo, valem os níveis dos cenários do idioma (o inglês já mostra o campo de nível)
+  const wordLevels = scenario ? scenario.word_levels : unique(languageScenarios.flatMap((s) => s.word_levels))
   const needsLevel = wordLevels.length > 0
+  // A progressão vem do cenário: o Cenário C é sempre crescente, e nele a densidade é a FINAL
+  const progression = scenario?.progressions[0] ?? 'fixed'
+  const increasing = progression === 'increasing'
 
   function edit(patch: Partial<FormValues>) {
-    setDraft({ baseLanguage, segmentTypes, density, wordLevel, progression, ...patch })
+    setDraft({ baseLanguage, segmentTypes, density, wordLevel, ...patch })
   }
 
   function changeLanguage(lang: BaseLanguage) {
@@ -184,23 +219,29 @@ export function AudioFilterPanel() {
   })
 
   function toggleSegmentType(type: SegmentType) {
-    edit({
-      segmentTypes: segmentTypes.includes(type)
-        ? segmentTypes.filter((t) => t !== type)
-        : [...segmentTypes, type],
-    })
+    if (segmentTypes.includes(type)) {
+      edit({ segmentTypes: segmentTypes.filter((t) => t !== type) })
+      return
+    }
+    // Um tipo de outro cenário (ex.: vocabulário avançado depois de phrasal verbs) troca de cenário:
+    // os tipos do cenário anterior são desmarcados, porque os cenários não se misturam
+    const target = languageScenarios.find((s) => s.segment_types.includes(type))
+    const kept = segmentTypes.filter((t) => target?.segment_types.includes(t))
+    edit({ segmentTypes: [...kept, type] })
   }
 
-  // Um filtro antigo pode ter um tipo que o cenário não aceita mais: esse tipo não conta nem é enviado
-  const validTypes = segmentTypes.filter((t) => allowedTypes.includes(t))
   const canSave =
-    storyId !== null && baseLanguage !== null && validTypes.length > 0 && (!needsLevel || wordLevel !== null)
+    storyId !== null &&
+    baseLanguage !== null &&
+    validTypes.length > 0 &&
+    scenario !== null &&
+    (!needsLevel || wordLevel !== null)
   const unchanged =
     saved !== undefined &&
     saved.rules.base_language === baseLanguage &&
     saved.rules.density === density &&
     (saved.rules.word_level ?? null) === (needsLevel ? wordLevel : null) &&
-    (saved.rules.progression ?? 'constant') === progression &&
+    (saved.rules.progression ?? 'fixed') === progression &&
     saved.rules.segment_types.length === segmentTypes.length &&
     saved.rules.segment_types.every((t) => segmentTypes.includes(t))
 
@@ -210,12 +251,22 @@ export function AudioFilterPanel() {
     const rules: FilterRules = { base_language: baseLanguage, segment_types: validTypes, density }
     // O nível só vai no cenário que o usa; nos outros a API recusa o campo
     if (needsLevel && wordLevel) rules.word_level = wordLevel
-    // A constante é o padrão e não é enviada: as regras (e o cache de áudio) dos filtros antigos não mudam
-    if (progression === 'increasing') rules.progression = progression
+    // A fixa é a padrão e não é enviada: as regras (e o cache de áudio) dos filtros antigos não mudam
+    if (increasing) rules.progression = progression
     save.mutate({ story_id: storyId, rules })
   }
 
   const loadFailed = stories.isError || filters.isError
+
+  // Com o filtro crescente salvo, a prévia mostra uma frase do começo e outra do fim da história
+  const previewEnabled = saved !== undefined && unchanged && increasing && storyId !== null
+  const preview = useQuery({
+    queryKey: ['preview', storyId, saved?.id],
+    queryFn: () => getStoryPreview(storyId as number, (saved as { id: number }).id),
+    enabled: previewEnabled,
+    retry: false,
+  })
+  const sample = previewEnabled && preview.data ? examples(preview.data) : null
 
   return (
     <form
@@ -327,7 +378,7 @@ export function AudioFilterPanel() {
       )}
 
       <fieldset className="mb-6">
-        <legend className={SECTION_TITLE}>Densidade</legend>
+        <legend className={SECTION_TITLE}>{increasing ? 'Densidade final' : 'Densidade'}</legend>
         <div className="grid grid-cols-3 gap-3">
           {densities.map((d) => (
             <Choice
@@ -344,25 +395,29 @@ export function AudioFilterPanel() {
         </div>
       </fieldset>
 
-      {progressions.length > 1 && (
-        <fieldset className="mb-7">
-          <legend className={SECTION_TITLE}>Progressão da densidade</legend>
-          <div className="grid grid-cols-2 gap-3">
-            {progressions.map((p) => (
-              <Choice
-                key={p}
-                type="radio"
-                name="progression"
-                checked={progression === p}
-                onChange={() => edit({ progression: p })}
-                label={PROGRESSION_LABELS[p]}
-                accent="var(--color-accent-pt)"
-                center
-              />
-            ))}
-          </div>
-          <p className="text-xs text-text-muted mt-1.5">{PROGRESSION_HINTS[progression]}</p>
-        </fieldset>
+      {increasing && (
+        <section aria-label="Progressão da densidade" className="mb-7">
+          <p className={SECTION_TITLE}>Progressão</p>
+          <p className="text-sm text-text-primary">Crescente</p>
+          <p className="text-xs text-text-muted mt-1">{PROGRESSION_HINTS.increasing}</p>
+          <DensityCurve density={density} />
+          {sample && (
+            <dl className="mt-3 space-y-1.5 text-xs text-text-muted">
+              <div>
+                <dt className="inline font-medium text-text-primary">No começo: </dt>
+                <dd className="inline">
+                  <ExampleSentence segment={sample.first} />
+                </dd>
+              </div>
+              <div>
+                <dt className="inline font-medium text-text-primary">No fim: </dt>
+                <dd className="inline">
+                  <ExampleSentence segment={sample.last} />
+                </dd>
+              </div>
+            </dl>
+          )}
+        </section>
       )}
 
       {!canSave && storyId !== null && (

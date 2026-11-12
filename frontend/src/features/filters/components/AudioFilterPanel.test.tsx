@@ -41,28 +41,61 @@ beforeEach(() => {
   vi.mocked(storiesApi.listStories).mockResolvedValue(STORIES)
   vi.mocked(filtersApi.listFilters).mockResolvedValue([])
   vi.mocked(filtersApi.getFilterOptions).mockResolvedValue(OPTIONS)
+  vi.mocked(storiesApi.getStoryPreview).mockResolvedValue(PREVIEW)
 })
 
 // Resposta de GET /filters/options (tabela de combinações do backend)
 const OPTIONS = {
   scenarios: [
-    { base_language: 'pt' as const, segment_types: ['phrasal_verbs' as const], word_levels: [], description: 'Cenário A' },
+    {
+      base_language: 'pt' as const,
+      segment_types: ['phrasal_verbs' as const],
+      word_levels: [],
+      progressions: ['fixed' as const],
+      description: 'Cenário A',
+    },
     {
       base_language: 'en' as const,
       segment_types: ['difficult_words' as const],
       word_levels: ['intermediate' as const, 'advanced' as const],
+      progressions: ['fixed' as const],
       description: 'Cenário B',
     },
     {
       base_language: 'pt' as const,
       segment_types: ['advanced_vocabulary' as const],
       word_levels: [],
+      progressions: ['increasing' as const],
       description: 'Cenário C',
     },
   ],
   densities: ['low' as const, 'medium' as const, 'high' as const],
   word_levels: ['intermediate' as const, 'advanced' as const],
-  progressions: ['constant' as const, 'increasing' as const],
+  progressions: ['fixed' as const, 'increasing' as const],
+}
+
+const SAVED_C = {
+  base_language: 'pt' as const,
+  segment_types: ['advanced_vocabulary' as const],
+  density: 'high' as const,
+  progression: 'increasing' as const,
+}
+
+// Prévia (GET /stories/{id}/preview) de uma história com trocas no começo e no fim
+const PREVIEW = {
+  story: { id: 1, title: 'A Raposa e as Uvas', language: 'en' },
+  rules: SAVED_C,
+  totals: { segments: 3, candidates: 3, swapped: 2 },
+  density_profile: [],
+  segments: [
+    { id: 1, position: 0, text: 'A raposa faminta.', swaps: [swap(9, 16, 'faminta', 'famished', 11)] },
+    { id: 2, position: 1, text: 'Nada aconteceu.', swaps: [] },
+    { id: 3, position: 2, text: 'Ela ficou descontente.', swaps: [swap(10, 21, 'descontente', 'disgruntled', 12)] },
+  ],
+}
+
+function swap(start: number, end: number, text: string, spoken: string, annotation_id: number) {
+  return { start, end, text, spoken, lang: 'en-US', annotation_id }
 }
 
 function axios422(msg: string) {
@@ -275,20 +308,25 @@ describe('AudioFilterPanel', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível salvar o filtro')
   })
 
-  it('cria o filtro do Cenário C com densidade crescente', async () => {
+  it('Cenário C: mostra a densidade como final, a progressão crescente e a curva', async () => {
     const user = userEvent.setup()
     vi.mocked(filtersApi.createFilter).mockResolvedValue(saved())
     renderPanel()
     await screen.findByRole('option', { name: 'A Raposa e as Uvas' })
 
     await user.click(screen.getByLabelText(/Português/))
-    await user.click(screen.getByLabelText('Vocabulário avançado'))
-    await user.click(screen.getByLabelText('Média'))
-    expect(screen.getByLabelText('Constante')).toBeChecked()
-    await user.click(screen.getByLabelText('Crescente'))
-    expect(screen.getByText(/Começa com poucas trocas e aumenta até o final/)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Salvar filtro' }))
+    expect(screen.getByText('Densidade')).toBeInTheDocument()
+    expect(screen.queryByTestId('density-curve')).not.toBeInTheDocument()
 
+    await user.click(screen.getByLabelText('Vocabulário avançado'))
+    expect(screen.getByText('Densidade final')).toBeInTheDocument()
+    const progressao = screen.getByRole('region', { name: 'Progressão da densidade' })
+    expect(progressao).toHaveTextContent('Crescente')
+    // o gráfico tem alternativa em texto: nome acessível e legenda com os valores
+    expect(screen.getByRole('img', { name: /Curva de densidade de inglês/ })).toBeInTheDocument()
+    expect(progressao).toHaveTextContent('O inglês começa em 7% das palavras escolhidas e sobe até 35% no final')
+
+    await user.click(screen.getByRole('button', { name: 'Salvar filtro' }))
     await waitFor(() =>
       expect(filtersApi.createFilter).toHaveBeenCalledWith({
         story_id: 1,
@@ -302,7 +340,25 @@ describe('AudioFilterPanel', () => {
     )
   })
 
-  it('combina phrasal verbs e vocabulário avançado e não envia a progressão constante', async () => {
+  it('o gráfico muda quando a densidade final muda', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await user.click(await screen.findByLabelText(/Português/))
+    await user.click(screen.getByLabelText('Vocabulário avançado'))
+    const linha = () => screen.getByTestId('density-curve-line').getAttribute('points')
+
+    const media = linha()
+    await user.click(screen.getByLabelText('Alta'))
+    expect(linha()).not.toBe(media)
+    expect(screen.getByRole('img', { name: /sobe até 60% no final/ })).toBeInTheDocument()
+
+    // a curva sobe do começo ao fim: o y (para baixo no SVG) diminui a cada ponto
+    const ys = linha()!.split(' ').map((p) => Number(p.split(',')[1]))
+    expect(ys.every((y, i) => i === 0 || y <= ys[i - 1])).toBe(true)
+    expect(ys[ys.length - 1]).toBeLessThan(ys[0])
+  })
+
+  it('phrasal verbs e vocabulário avançado são cenários diferentes: escolher um desmarca o outro', async () => {
     const user = userEvent.setup()
     vi.mocked(filtersApi.createFilter).mockResolvedValue(saved())
     renderPanel()
@@ -311,31 +367,44 @@ describe('AudioFilterPanel', () => {
     await user.click(screen.getByLabelText(/Português/))
     await user.click(screen.getByLabelText('Phrasal verbs'))
     await user.click(screen.getByLabelText('Vocabulário avançado'))
+    expect(screen.getByLabelText('Phrasal verbs')).not.toBeChecked()
+    expect(screen.getByLabelText('Vocabulário avançado')).toBeChecked()
+
+    await user.click(screen.getByLabelText('Phrasal verbs'))
+    expect(screen.getByLabelText('Vocabulário avançado')).not.toBeChecked()
+    expect(screen.queryByText('Densidade final')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Salvar filtro' }))
 
+    // Cenário A: a progressão fixa é a padrão e não é enviada
     await waitFor(() =>
       expect(filtersApi.createFilter).toHaveBeenCalledWith({
         story_id: 1,
-        rules: { base_language: 'pt', segment_types: ['phrasal_verbs', 'advanced_vocabulary'], density: 'medium' },
+        rules: { base_language: 'pt', segment_types: ['phrasal_verbs'], density: 'medium' },
       }),
     )
   })
 
-  it('reaparece com a progressão crescente salva', async () => {
-    vi.mocked(filtersApi.listFilters).mockResolvedValue([
-      saved({
-        rules: {
-          base_language: 'pt',
-          segment_types: ['advanced_vocabulary'],
-          density: 'high',
-          progression: 'increasing',
-        },
-      }),
-    ])
+  it('o filtro do Cenário C salvo reaparece preenchido, com frases de exemplo do começo e do fim', async () => {
+    vi.mocked(filtersApi.listFilters).mockResolvedValue([saved({ rules: SAVED_C })])
     renderPanel()
 
     await waitFor(() => expect(screen.getByLabelText('Vocabulário avançado')).toBeChecked())
-    expect(screen.getByLabelText('Crescente')).toBeChecked()
+    expect(screen.getByLabelText('Alta')).toBeChecked()
+    expect(screen.getByText('Densidade final')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Ouvir' })).toHaveAttribute('href', '/player/1?filter=7')
+
+    expect(await screen.findByText('No começo:')).toBeInTheDocument()
+    expect(storiesApi.getStoryPreview).toHaveBeenCalledWith(1, 7)
+    expect(screen.getByText('famished')).toBeInTheDocument()
+    expect(screen.getByText('No fim:')).toBeInTheDocument()
+    expect(screen.getByText('disgruntled')).toBeInTheDocument()
+  })
+
+  it('não busca a prévia nos filtros de densidade fixa', async () => {
+    vi.mocked(filtersApi.listFilters).mockResolvedValue([saved()])
+    renderPanel()
+    await waitFor(() => expect(screen.getByLabelText('Phrasal verbs')).toBeChecked())
+    expect(storiesApi.getStoryPreview).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('density-curve')).not.toBeInTheDocument()
   })
 })

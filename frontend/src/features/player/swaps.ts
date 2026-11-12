@@ -1,4 +1,4 @@
-import type { Density, FilterRules, SegmentType, WordLevel } from '../filters/api'
+import type { Density, FilterRules, Progression, SegmentType, WordLevel } from '../filters/api'
 import type { StoryAnnotation, StorySegment } from '../stories/api'
 
 // Espelho de backend/app/modules/audio/composer: o que o player destaca precisa ser o que o áudio fala.
@@ -9,10 +9,6 @@ export const DENSITY_SHARE: Record<Density, number> = {
   high: 60,
 }
 
-// Densidade crescente (US11): peso de cada terço da história, em % da densidade (início, meio e fim)
-export const PHASE_WEIGHTS = [50, 100, 150] as const
-const PHASES = PHASE_WEIGHTS.length
-
 // Índices dos candidatos trocados, espaçados de forma regular (mesma conta do `pick_evenly`)
 export function pickEvenly(total: number, density: Density): number[] {
   if (total === 0) return []
@@ -21,32 +17,38 @@ export function pickEvenly(total: number, density: Density): number[] {
   return Array.from({ length: quantity }, (_, i) => Math.floor(((2 * i + 1) * total) / (2 * quantity)))
 }
 
-// Terço da história (0 = início, 1 = meio, 2 = fim) da frase de índice `index` entre `total` frases
-export function phaseOf(index: number, total: number): number {
-  return Math.floor((PHASES * index) / total)
+// ---------- curva de densidade crescente (US11, Cenário C): espelho do `DensityCurve` ----------
+// A densidade do filtro é a FINAL. A curva começa em 1/5 dela e sobe em linha reta até ela no fim da história.
+
+// Fração-alvo (0 a 1) na posição relativa `position` (0 = começo, 1 = fim)
+export function curveTarget(density: Density, position: number): number {
+  return ((DENSITY_SHARE[density] / 100) * (1 + 4 * position)) / 5
 }
 
-// Fração trocada no terço, em centésimos de ponto percentual (média no fim = 5250 = 52,5%)
-export function phasePercent(density: Density, phase: number): number {
-  return DENSITY_SHARE[density] * PHASE_WEIGHTS[phase]
+// Fração-alvo da frase `index` (de `total`) = numerador / (1000 * total), só com inteiros
+function curveNumerator(density: Density, index: number, total: number): number {
+  return DENSITY_SHARE[density] * (2 * total + 8 * index + 4)
 }
 
-// Mesma conta do `pick_increasing`: em cada terço, densidade x peso, espaçados dentro do terço
-export function pickIncreasing(phases: number[], density: Density): number[] {
+// Fração-alvo de trocas da frase `index` (de `total`): a da curva, ou a densidade fixa
+export function sentenceTarget(density: Density, progression: Progression | undefined, index: number, total: number) {
+  if (progression === 'increasing') return curveNumerator(density, index, total) / (1000 * total)
+  return DENSITY_SHARE[density] / 100
+}
+
+// Método do acumulador (mesma conta do `DensityCurve.select`): `sentences[k]` é a frase do candidato k
+export function pickWithCurve(sentences: number[], total: number, density: Density): number[] {
+  const whole = 1000 * total
+  let accumulator = whole / 2
   const chosen: number[] = []
-  for (let phase = 0; phase < PHASES; phase++) {
-    const indices = phases.flatMap((p, i) => (p === phase ? [i] : []))
-    const total = indices.length
-    const quantity = Math.min(total, Math.floor((phasePercent(density, phase) * total + 5000) / 10000))
-    for (let i = 0; i < quantity; i++) chosen.push(indices[Math.floor(((2 * i + 1) * total) / (2 * quantity))])
-  }
-  if (chosen.length === 0 && phases.length > 0) {
-    // Pelo menos uma troca: a do meio do último terço com candidatos
-    const lastPhase = Math.max(...phases)
-    const last = phases.flatMap((p, i) => (p === lastPhase ? [i] : []))
-    chosen.push(last[Math.floor(last.length / 2)])
-  }
-  return chosen.sort((a, b) => a - b)
+  sentences.forEach((index, k) => {
+    accumulator += curveNumerator(density, index, total)
+    if (accumulator >= whole) {
+      chosen.push(k)
+      accumulator -= whole
+    }
+  })
+  return chosen
 }
 
 // Nível pedido no filtro -> níveis das anotações que entram: o intermediário inclui as raras
@@ -67,37 +69,26 @@ const CANDIDATES: Partial<Record<SegmentType, (a: StoryAnnotation, rules: Filter
   advanced_vocabulary: (a) => a.kind === 'difficult_word' && a.extra?.level === 'advanced',
 }
 
-const sortedSegments = (segments: StorySegment[]) => [...segments].sort((a, b) => a.position - b.position)
-
-// Terço da história de cada frase (pela posição): usado pela curva e pelo indicador de densidade
-export function segmentPhases(segments: StorySegment[]): Map<number, number> {
-  const ordered = sortedSegments(segments)
-  return new Map(ordered.map((segment, index) => [segment.id, phaseOf(index, ordered.length)]))
-}
-
-// Candidatos de cada tipo do filtro, em ordem de aparição, com o terço de cada um
-function candidatesByType(segments: StorySegment[], rules: FilterRules) {
-  const phases = segmentPhases(segments)
-  // Ordem de aparição: frase, depois posição na frase (faz parte do determinismo da escolha)
-  const ordered = sortedSegments(segments).flatMap((segment) =>
-    [...segment.annotations]
-      .sort((a, b) => a.en_start - b.en_start || a.id - b.id)
-      .map((annotation) => ({ annotation, phase: phases.get(segment.id) ?? 0 })),
-  )
-  return rules.segment_types.map((type) => {
-    const accepts = CANDIDATES[type]
-    return accepts ? ordered.filter(({ annotation }) => isAligned(annotation) && accepts(annotation, rules)) : []
-  })
-}
-
 // Escolhe, de forma estável e espalhada pela história inteira, quais anotações viram troca
 export function selectSwapIds(segments: StorySegment[], rules: FilterRules): Set<number> {
+  const orderedSegments = [...segments].sort((a, b) => a.position - b.position)
+  // Ordem de aparição: frase, depois posição na frase (faz parte do determinismo da escolha)
+  const ordered = orderedSegments.flatMap((segment, sentence) =>
+    [...segment.annotations]
+      .sort((a, b) => a.en_start - b.en_start || a.id - b.id)
+      .map((annotation) => ({ annotation, sentence })),
+  )
+
   const selected = new Set<number>()
-  for (const candidates of candidatesByType(segments, rules)) {
+  for (const type of rules.segment_types) {
+    const accepts = CANDIDATES[type]
+    if (!accepts) continue
+    const candidates = ordered.filter(({ annotation }) => isAligned(annotation) && accepts(annotation, rules))
     const indices =
       rules.progression === 'increasing'
-        ? pickIncreasing(
-            candidates.map((c) => c.phase),
+        ? pickWithCurve(
+            candidates.map((c) => c.sentence),
+            orderedSegments.length,
             rules.density,
           )
         : pickEvenly(candidates.length, rules.density)
@@ -106,30 +97,7 @@ export function selectSwapIds(segments: StorySegment[], rules: FilterRules): Set
   return selected
 }
 
-export interface DensityPhase {
-  // Fração da densidade neste terço, em centésimos de ponto percentual (3500 = 35%)
-  percent: number
-  candidates: number
-  swapped: number
-}
-
-// Resumo da densidade por terço da história, para o indicador do player. Na densidade constante, os três
-// terços têm a mesma fração; na crescente, ela sobe do início ao fim.
-export function densityPhases(segments: StorySegment[], rules: FilterRules, swapIds: ReadonlySet<number>): DensityPhase[] {
-  const increasing = rules.progression === 'increasing'
-  const phases: DensityPhase[] = PHASE_WEIGHTS.map((_, phase) => ({
-    percent: increasing ? phasePercent(rules.density, phase) : DENSITY_SHARE[rules.density] * 100,
-    candidates: 0,
-    swapped: 0,
-  }))
-  const seen = new Set<number>()
-  for (const candidates of candidatesByType(segments, rules)) {
-    for (const { annotation, phase } of candidates) {
-      if (seen.has(annotation.id)) continue
-      seen.add(annotation.id)
-      phases[phase].candidates++
-      if (swapIds.has(annotation.id)) phases[phase].swapped++
-    }
-  }
-  return phases
+// Fração (0 a 1) em porcentagem, com vírgula decimal: 0,07 -> "7%"; 0,175 -> "17,5%"
+export function formatShare(share: number): string {
+  return `${(share * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
 }

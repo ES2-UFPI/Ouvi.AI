@@ -6,8 +6,9 @@ export type BaseLanguage = 'pt' | 'en'
 export type SegmentType = 'phrasal_verbs' | 'difficult_words' | 'advanced_vocabulary'
 export type Density = 'low' | 'medium' | 'high'
 export type WordLevel = 'intermediate' | 'advanced'
-// Progressão da densidade ao longo da história (US11); ausente = constante
-export type Progression = 'constant' | 'increasing'
+// Progressão da densidade ao longo da história (US11): `fixed` nos Cenários A e B (padrão, ausente nas regras);
+// `increasing` no Cenário C, em que a densidade escolhida é a densidade FINAL
+export type Progression = 'fixed' | 'increasing'
 
 export interface FilterRules {
   base_language: BaseLanguage
@@ -15,15 +16,16 @@ export interface FilterRules {
   density: Density
   // Só no Cenário B (base inglês); a API omite a chave quando não há nível
   word_level?: WordLevel
-  // Só aparece quando é `increasing`: a API omite a constante (o padrão)
+  // Só aparece quando é `increasing` (Cenário C): a API omite a fixa (o padrão)
   progression?: Progression
 }
 
-// Uma combinação aceita pela API: idioma base, tipos de trecho e níveis (vazio = sem nível)
+// Uma combinação aceita pela API: idioma base, tipos de trecho, níveis (vazio = sem nível) e progressão
 export interface Scenario {
   base_language: BaseLanguage
   segment_types: SegmentType[]
   word_levels: WordLevel[]
+  progressions: Progression[]
   description: string
 }
 

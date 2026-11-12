@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { densityPhases, phaseOf, pickEvenly, pickIncreasing, segmentPhases, selectSwapIds } from './swaps'
+import { curveTarget, formatShare, pickEvenly, pickWithCurve, selectSwapIds, sentenceTarget } from './swaps'
 import type { FilterRules } from '../filters/api'
 import type { StoryAnnotation, StorySegment } from '../stories/api'
 
@@ -71,28 +71,29 @@ describe('selectSwapIds', () => {
 })
 
 // Mesmos valores de backend/tests/test_density_curve.py: o player precisa destacar o que o áudio fala
-describe('densidade crescente (espelho do pick_increasing)', () => {
-  const tercos = (total: number) => Array.from({ length: total }, (_, i) => phaseOf(i, total))
-  const porTerco = (fases: number[], escolhidos: number[]) =>
-    [0, 1, 2].map((t) => escolhidos.filter((i) => fases[i] === t).length)
+describe('densidade crescente (espelho do DensityCurve)', () => {
+  const umaPorFrase = (total: number) => Array.from({ length: total }, (_, i) => i)
 
-  it('divide a história em terços pela posição', () => {
-    expect(tercos(10)).toEqual([0, 0, 0, 0, 1, 1, 1, 2, 2, 2])
+  it('a curva começa em 1/5 da densidade final e chega a ela no fim', () => {
+    expect(curveTarget('medium', 0)).toBeCloseTo(0.07)
+    expect(curveTarget('medium', 1)).toBeCloseTo(0.35)
+    expect(sentenceTarget('medium', 'increasing', 9, 10)).toBeCloseTo(curveTarget('medium', 0.95))
+    expect(sentenceTarget('medium', undefined, 0, 10)).toBe(0.35)
   })
 
-  it('dá os mesmos índices do backend', () => {
-    const fases = tercos(30)
-    expect(pickIncreasing(fases, 'low')).toEqual([5, 12, 17, 22, 27])
-    expect(porTerco(fases, pickIncreasing(fases, 'medium'))).toEqual([2, 4, 5])
-    expect(porTerco(fases, pickIncreasing(fases, 'high'))).toEqual([3, 6, 9])
+  it('dá os mesmos índices do backend (método do acumulador)', () => {
+    expect(pickWithCurve(umaPorFrase(30), 30, 'low')).toEqual([9, 20, 28])
+    expect(pickWithCurve(umaPorFrase(30), 30, 'medium')).toEqual([5, 11, 16, 20, 24, 27])
+    expect(pickWithCurve(umaPorFrase(30), 30, 'high')).toEqual([3, 8, 11, 14, 17, 19, 21, 24, 25, 27, 29])
   })
 
-  it('troca pelo menos um quando há candidatos', () => {
-    expect(pickIncreasing([0, 0, 1], 'low')).toEqual([2])
-    expect(pickIncreasing([], 'high')).toEqual([])
+  it('histórias curtas ou sem candidatos não dão erro', () => {
+    expect(pickWithCurve([], 3, 'high')).toEqual([])
+    expect(pickWithCurve([0], 1, 'low')).toEqual([])
+    expect(pickWithCurve([0, 0, 1, 2], 3, 'high')).toEqual([2])
   })
 
-  it('Cenário C: só as palavras raras, com a curva aplicada por terço da história', () => {
+  it('Cenário C: só as palavras raras, com a curva pela posição das frases', () => {
     const frases = Array.from({ length: 30 }, (_, i) =>
       segmentWith(
         [
@@ -105,22 +106,16 @@ describe('densidade crescente (espelho do pick_increasing)', () => {
     const rules: FilterRules = {
       base_language: 'pt', segment_types: ['advanced_vocabulary'], density: 'medium', progression: 'increasing',
     }
-    const ids = selectSwapIds(frases, rules)
-    expect([...ids].every((id) => id <= 30)).toBe(true)
-    expect(porTerco(tercos(30), [...ids].map((id) => id - 1))).toEqual([2, 4, 5])
-    // sem a progressão, volta à densidade constante (mesmo resultado de antes da US11)
-    const { progression: _, ...constante } = rules
-    expect(selectSwapIds(frases, constante).size).toBe(pickEvenly(30, 'medium').length)
-
-    const fases = densityPhases(frases, rules, ids)
-    expect(fases.map((f) => f.percent)).toEqual([1750, 3500, 5250])
-    expect(fases.map((f) => f.candidates)).toEqual([10, 10, 10])
-    expect(fases.map((f) => f.swapped)).toEqual([2, 4, 5])
+    expect([...selectSwapIds(frases, rules)].sort((a, b) => a - b)).toEqual([6, 12, 17, 21, 25, 28])
+    // fora de ordem dá o mesmo resultado: a posição é a da frase
+    expect(selectSwapIds([...frases].reverse(), rules)).toEqual(selectSwapIds(frases, rules))
+    // sem a progressão, volta à densidade fixa (a mesma de antes da US11)
+    const { progression: _, ...fixa } = rules
+    expect(selectSwapIds(frases, fixa).size).toBe(pickEvenly(30, 'medium').length)
   })
 
-  it('na densidade constante os três terços têm a mesma fração', () => {
-    const fases = densityPhases([segmentWith([annotation(1)])], scenarioA('low'), new Set([1]))
-    expect(fases.map((f) => f.percent)).toEqual([1500, 1500, 1500])
-    expect(segmentPhases([segmentWith([], 1), segmentWith([], 0)]).get(1)).toBe(0)
+  it('formata porcentagens com vírgula decimal', () => {
+    expect(formatShare(0.07)).toBe('7%')
+    expect(formatShare(0.175)).toBe('17,5%')
   })
 })

@@ -11,12 +11,12 @@ import {
   WORD_LEVEL_LABELS,
 } from '../../filters/labels'
 import { PageLayout } from '../../../shared/components/PageLayout'
-import { getStorySegments, listStories } from '../../stories/api'
+import { getStoryPreview, getStorySegments, listStories } from '../../stories/api'
 import { useGeneratedAudio } from '../hooks/useGeneratedAudio'
 import { AudioPlayer } from './AudioPlayer'
-import { densityPhases, segmentPhases, selectSwapIds } from '../swaps'
+import { selectSwapIds } from '../swaps'
 import { BilingualText } from './BilingualText'
-import { DensityIndicator } from './DensityIndicator'
+import { DensityStrip } from './DensityStrip'
 
 export function PlayerPage() {
   const { storyId } = useParams<{ storyId: string }>()
@@ -59,17 +59,14 @@ function PlayerPageContent() {
     () => (rules && segments.data ? selectSwapIds(segments.data.segments, rules) : new Set<number>()),
     [rules, segments.data],
   )
-  // Indicador de densidade: quanto muda de idioma em cada terço da história e em qual terço o áudio está
-  const phases = useMemo(
-    () => (rules && segments.data ? densityPhases(segments.data.segments, rules, swapIds) : null),
-    [rules, segments.data, swapIds],
-  )
-  const phaseBySegment = useMemo(
-    () => (segments.data ? segmentPhases(segments.data.segments) : new Map<number, number>()),
-    [segments.data],
-  )
-  const currentSegmentId = audio.current?.segment_id ?? null
-  const currentPhase = currentSegmentId !== null ? (phaseBySegment.get(currentSegmentId) ?? null) : null
+  // Faixa de densidade: só na densidade crescente (Cenário C), com o perfil por frase calculado pela prévia
+  const increasing = rules?.progression === 'increasing'
+  const preview = useQuery({
+    queryKey: ['preview', storyId, filterId],
+    queryFn: () => getStoryPreview(storyId, filterId as number),
+    enabled: increasing && validStory && filterId !== null,
+    retry: false,
+  })
 
   // Resumo do filtro escolhido, mostrado como etiquetas no topo do player
   const chips = rules
@@ -77,8 +74,8 @@ function PlayerPageContent() {
       `Base: ${LANGUAGE_LABELS[rules.base_language]}`,
       ...rules.segment_types.map((t) => SEGMENT_LABELS[t]),
       ...(rules.word_level ? [`Nível ${WORD_LEVEL_LABELS[rules.word_level].toLowerCase()}`] : []),
-      `Densidade ${DENSITY_LABELS[rules.density].toLowerCase()}`,
-      ...(rules.progression === 'increasing' ? [PROGRESSION_LABELS.increasing] : []),
+      `Densidade ${increasing ? 'final ' : ''}${DENSITY_LABELS[rules.density].toLowerCase()}`,
+      ...(increasing ? [`Progressão ${PROGRESSION_LABELS.increasing.toLowerCase()}`] : []),
     ]
     : []
 
@@ -144,6 +141,13 @@ function PlayerPageContent() {
             waitingMessage={waitingMessage}
             notice={notice}
           />
+          {increasing && preview.data && (
+            <DensityStrip
+              profile={preview.data.density_profile}
+              currentSegmentId={audio.current?.segment_id ?? null}
+              onSelect={audio.goTo}
+            />
+          )}
           {audio.finished && (
             <div className="text-center mt-3">
               <button
@@ -169,14 +173,6 @@ function PlayerPageContent() {
             </p>
           )}
         </div>
-      )}
-      {rules && phases && (
-        <DensityIndicator
-          density={rules.density}
-          progression={rules.progression ?? 'constant'}
-          phases={phases}
-          currentPhase={showPlayer ? currentPhase : null}
-        />
       )}
       {rules && segments.data && (
         <BilingualText

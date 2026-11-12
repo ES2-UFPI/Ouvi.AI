@@ -190,28 +190,78 @@ describe('PlayerPage', () => {
     expect(screen.getByText('Frase 1.').closest('p')).not.toHaveAttribute('aria-current')
   })
 
-  it('mostra o indicador de densidade crescente e acompanha o terço da história que está tocando', async () => {
-    vi.mocked(filtersApi.getFilter).mockResolvedValue({
-      id: 7,
-      story_id: 1,
-      rules: { base_language: 'pt', segment_types: ['advanced_vocabulary'], density: 'high', progression: 'increasing' },
-      created_at: '',
-      updated_at: '',
+  describe('faixa de densidade (Cenário C)', () => {
+    const PERFIL = [
+      { segment_id: 1, position: 0, candidates: 1, swapped: 0, target: 0.2 },
+      { segment_id: 2, position: 1, candidates: 1, swapped: 1, target: 0.36 },
+      { segment_id: 3, position: 2, candidates: 1, swapped: 1, target: 0.52 },
+    ]
+
+    beforeEach(() => {
+      vi.mocked(filtersApi.getFilter).mockResolvedValue({
+        id: 7,
+        story_id: 1,
+        rules: { base_language: 'pt', segment_types: ['advanced_vocabulary'], density: 'high', progression: 'increasing' },
+        created_at: '',
+        updated_at: '',
+      })
+      vi.mocked(storiesApi.getStoryPreview).mockResolvedValue({
+        story: { id: 1, title: 'A Raposa e as Uvas', language: 'en' },
+        rules: { base_language: 'pt', segment_types: ['advanced_vocabulary'], density: 'high', progression: 'increasing' },
+        totals: { segments: 3, candidates: 3, swapped: 2 },
+        density_profile: PERFIL,
+        segments: [],
+      })
+      vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready', 'ready', 'ready']))
     })
-    vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready', 'ready', 'ready']))
-    const { container } = renderPlayer()
+
+    it('mostra uma coluna por frase, destaca a atual e o texto acompanha a frase', async () => {
+      const { container } = renderPlayer()
+      await screen.findByLabelText('Reproduzir')
+
+      expect(screen.getByText('Densidade final alta')).toBeInTheDocument()
+      expect(screen.getByText('Progressão crescente')).toBeInTheDocument()
+      const faixa = await screen.findByRole('region', { name: 'Densidade de inglês por frase' })
+      expect(storiesApi.getStoryPreview).toHaveBeenCalledWith(1, 7)
+      const colunas = screen.getAllByRole('button', { name: /^Frase \d: / })
+      expect(colunas).toHaveLength(3)
+      expect(colunas[0]).toHaveAttribute('aria-current', 'true')
+      expect(faixa).toHaveTextContent('Inglês nesta parte: 20%')
+
+      fireEvent(audioDe(container), new Event('ended'))
+      expect(await screen.findByText('Inglês nesta parte: 36%')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^Frase 2: 36% de inglês, 1 palavra em inglês \(tocando agora\)/ })).toHaveAttribute(
+        'aria-current',
+        'true',
+      )
+    })
+
+    it('clicar numa coluna leva o player à frase correspondente', async () => {
+      renderPlayer()
+      await screen.findByLabelText('Reproduzir')
+
+      fireEvent.click(await screen.findByRole('button', { name: /^Frase 3: / }))
+
+      expect(await screen.findByText('Frase 3 de 3')).toBeInTheDocument()
+      expect(screen.getByText('Inglês nesta parte: 52%')).toBeInTheDocument()
+      expect(screen.getByText('Frase 3.').closest('p')).toHaveAttribute('aria-current', 'true')
+    })
+
+    it('tem alternativa em texto para leitores de tela', async () => {
+      renderPlayer()
+      const faixa = await screen.findByRole('region', { name: 'Densidade de inglês por frase' })
+      expect(faixa).toHaveTextContent(
+        'O inglês começa em 20% e sobe até 52% no final da história. 2 de 3 palavras de vocabulário avançado são faladas em inglês.',
+      )
+    })
+  })
+
+  it('a faixa de densidade não aparece nos filtros de densidade fixa', async () => {
+    vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready']))
+    renderPlayer()
     await screen.findByLabelText('Reproduzir')
-
-    expect(screen.getByText('Vocabulário avançado')).toBeInTheDocument()
-    expect(screen.getByText('Crescente')).toBeInTheDocument()
-    const indicador = await screen.findByRole('region', { name: 'Indicador de densidade' })
-    expect(indicador).toHaveTextContent('Início: 30%')
-    expect(indicador).toHaveTextContent('Meio: 60%')
-    expect(indicador).toHaveTextContent('Fim: 90%')
-    expect(await screen.findByText(/Agora: início da história/)).toBeInTheDocument()
-
-    fireEvent(audioDe(container), new Event('ended'))
-    expect(await screen.findByText(/Agora: meio da história, 60% das trocas possíveis/)).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Densidade de inglês por frase' })).not.toBeInTheDocument()
+    expect(storiesApi.getStoryPreview).not.toHaveBeenCalled()
   })
 
   it('mostra o resumo do filtro escolhido', async () => {
