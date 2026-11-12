@@ -12,6 +12,7 @@ from app.modules.audio.router import router as audio_router
 from app.modules.auth.router import router as auth_router
 from app.modules.filters.router import router as filters_router
 from app.modules.health.router import router as health_router
+from app.modules.progress.router import router as progress_router
 from app.modules.stories.router import router as stories_router
 from app.modules.users.router import router as users_router
 
@@ -51,6 +52,7 @@ def create_app() -> FastAPI:
     app.include_router(filters_router)
     app.include_router(stories_router)
     app.include_router(audio_router)
+    app.include_router(progress_router)
 
     return app
 

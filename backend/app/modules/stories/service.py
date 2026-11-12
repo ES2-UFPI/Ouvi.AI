@@ -23,3 +23,12 @@ class StoryService:
         if story is None:
             raise LookupError(f"História {story_id} não encontrada")
         return story, self.segments.list_by_story(story_id, kind=kind, aligned_only=aligned_only)
+
+    def count_segments(self, story_id: int) -> int:
+        """Quantas frases a história tem (ex.: o progresso valida a posição da frase com isto).
+
+        Levanta LookupError se a história não existe.
+        """
+        if self.stories.get_by_id(story_id) is None:
+            raise LookupError(f"História {story_id} não encontrada")
+        return self.segments.count_by_story(story_id)
