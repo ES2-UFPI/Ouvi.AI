@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from app.modules.audio.composer.density import pick_evenly
 from app.modules.stories.models import KIND_DIFFICULT_WORD, KIND_PHRASAL_VERB
-from app.modules.stories.nlp.levels import LEVEL_INTERMEDIATE, levels_for_filter
+from app.modules.stories.nlp.levels import LEVEL_ADVANCED, LEVEL_INTERMEDIATE, levels_for_filter
 
 if TYPE_CHECKING:
     from app.modules.stories.models import Annotation
@@ -58,12 +58,32 @@ class DifficultWordStrategy:
         return {candidates[i].id for i in pick_evenly(len(candidates), density)}
 
 
+class AdvancedVocabularyStrategy:
+    """Troca o vocabulário avançado (Cenário C: base português, a palavra é falada em inglês).
+
+    Reaproveita as anotações de palavras difíceis (a mesma lista de frequência), mas só as RARAS (nível
+    avançado) e sempre na direção oposta à do Cenário B: o texto fica em português e a palavra rara é
+    ouvida em inglês. Não usa `word_level`: o próprio tipo já é o nível mais alto."""
+
+    kind = KIND_DIFFICULT_WORD
+    levels = frozenset({LEVEL_ADVANCED})
+
+    def select(self, annotations: "Sequence[Annotation]", density: str) -> set[int]:
+        candidates = [
+            a
+            for a in annotations
+            if a.kind == self.kind and is_aligned(a) and (a.extra or {}).get("level") in self.levels
+        ]
+        return {candidates[i].id for i in pick_evenly(len(candidates), density)}
+
+
 class SwapStrategyFactory:
     # O tipo do FILTRO ("phrasal_verbs", no plural) liga à estratégia. Um novo tipo entra aqui com uma linha.
     # Cada construtor recebe as opções do filtro (hoje só `word_level`) e usa as que lhe interessam.
     _registry: dict[str, Callable[[str | None], SwapStrategy]] = {
         "phrasal_verbs": lambda word_level: PhrasalVerbStrategy(),
         "difficult_words": DifficultWordStrategy,
+        "advanced_vocabulary": lambda word_level: AdvancedVocabularyStrategy(),
     }
 
     @classmethod

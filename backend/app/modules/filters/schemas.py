@@ -14,7 +14,7 @@ from pydantic import (
 # Literal: qualquer valor fora da lista é recusado com 422 antes de chegar ao Service.
 # Novos tipos de trecho entram aqui sem migração, porque as regras ficam em JSONB.
 BaseLanguage = Literal["pt", "en"]
-# `advanced_vocabulary` é da US11: já faz parte do contrato, mas ainda não está em nenhuma combinação permitida
+# `advanced_vocabulary` (US11, Cenário C): as palavras raras da história, faladas em inglês sobre a base português
 SegmentType = Literal["phrasal_verbs", "difficult_words", "advanced_vocabulary"]
 Density = Literal["low", "medium", "high"]
 # Nível das palavras difíceis: `intermediate` troca mais palavras (as pouco frequentes e as raras),
@@ -33,7 +33,8 @@ class Scenario(BaseModel):
 
 
 # Tabela ÚNICA das combinações permitidas: a API valida com ela e o front a lê em GET /filters/options.
-# Um novo cenário (ex.: US11) entra aqui com uma linha, sem mexer na validação.
+# Um novo cenário entra aqui com uma linha, sem mexer na validação. Um idioma base pode ter mais de um
+# cenário (A e C são ambos em português): os tipos aceitos para ele são a união dos cenários.
 SCENARIOS: tuple[Scenario, ...] = (
     Scenario(
         base_language="pt",
@@ -47,11 +48,32 @@ SCENARIOS: tuple[Scenario, ...] = (
         word_levels=list(get_args(WordLevel)),
         description="Cenário B: história em inglês com as palavras difíceis faladas em português",
     ),
+    Scenario(
+        base_language="pt",
+        segment_types=["advanced_vocabulary"],
+        word_levels=[],
+        description="Cenário C: história em português com o vocabulário avançado falado em inglês",
+    ),
 )
 
 
-def scenario_for(base_language: str) -> Scenario | None:
-    return next((s for s in SCENARIOS if s.base_language == base_language), None)
+def scenarios_for(base_language: str) -> list[Scenario]:
+    return [s for s in SCENARIOS if s.base_language == base_language]
+
+
+def allowed_segment_types(base_language: str) -> list[SegmentType]:
+    """Tipos de trecho aceitos com o idioma base: a união dos cenários dele, na ordem da tabela."""
+    types: list[SegmentType] = []
+    for scenario in scenarios_for(base_language):
+        types.extend(t for t in scenario.segment_types if t not in types)
+    return types
+
+
+def allowed_word_levels(base_language: str) -> list[WordLevel]:
+    levels: list[WordLevel] = []
+    for scenario in scenarios_for(base_language):
+        levels.extend(level for level in scenario.word_levels if level not in levels)
+    return levels
 
 
 class StoredFilterRules(BaseModel):
@@ -82,22 +104,23 @@ class FilterRules(StoredFilterRules):
 
     @model_validator(mode="after")
     def _check_combination(self) -> "FilterRules":
-        scenario = scenario_for(self.base_language)
-        if scenario is None:  # pragma: no cover - hoje todo idioma base tem cenário
+        allowed_types = allowed_segment_types(self.base_language)
+        if not allowed_types:  # pragma: no cover - hoje todo idioma base tem cenário
             raise ValueError(f"o idioma base {self.base_language!r} ainda não tem nenhum cenário disponível")
 
-        invalid = [t for t in self.segment_types if t not in scenario.segment_types]
+        invalid = [t for t in self.segment_types if t not in allowed_types]
         if invalid:
-            allowed = ", ".join(scenario.segment_types)
+            allowed = ", ".join(allowed_types)
             raise ValueError(
                 f"combinação não disponível: idioma base {self.base_language!r} com {', '.join(invalid)}. "
                 f"Com idioma base {self.base_language!r} os tipos aceitos são: {allowed}"
             )
 
-        if scenario.word_levels and self.word_level is None:
-            levels = ", ".join(scenario.word_levels)
+        word_levels = allowed_word_levels(self.base_language)
+        if word_levels and self.word_level is None:
+            levels = ", ".join(word_levels)
             raise ValueError(f"word_level é obrigatório com idioma base {self.base_language!r} ({levels})")
-        if not scenario.word_levels and self.word_level is not None:
+        if not word_levels and self.word_level is not None:
             raise ValueError(f"word_level não se aplica ao idioma base {self.base_language!r}: remova o campo")
         return self
 

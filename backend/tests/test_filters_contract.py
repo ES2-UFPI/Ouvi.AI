@@ -62,7 +62,6 @@ def test_hash_do_cenario_a_nao_muda_com_o_novo_campo():
         ({**CENARIO_A, "base_language": "en"}, "combinação não disponível"),  # en + phrasal_verbs
         ({**CENARIO_B, "base_language": "pt"}, "combinação não disponível"),  # pt + difficult_words
         ({**CENARIO_A, "segment_types": ["phrasal_verbs", "difficult_words"]}, "combinação não disponível"),
-        ({**CENARIO_A, "segment_types": ["advanced_vocabulary"]}, "combinação não disponível"),  # US11, ainda não
         ({**CENARIO_B, "segment_types": ["advanced_vocabulary"]}, "combinação não disponível"),
         ({k: v for k, v in CENARIO_B.items() if k != "word_level"}, "word_level é obrigatório"),
         ({**CENARIO_A, "word_level": "advanced"}, "word_level não se aplica"),
@@ -113,8 +112,10 @@ def test_options_devolve_a_tabela_de_cenarios(api, make_user):
     resposta = api.get("/filters/options", headers=headers)
     assert resposta.status_code == 200
     opcoes = resposta.json()
+    cenarios = {(c["base_language"], tuple(c["segment_types"])): c for c in opcoes["scenarios"]}
+    assert cenarios[("pt", ("phrasal_verbs",))]["word_levels"] == []
+    assert cenarios[("pt", ("advanced_vocabulary",))]["word_levels"] == []  # Cenário C (US11)
     cenarios = {c["base_language"]: c for c in opcoes["scenarios"]}
-    assert cenarios["pt"]["segment_types"] == ["phrasal_verbs"] and cenarios["pt"]["word_levels"] == []
     assert cenarios["en"]["segment_types"] == ["difficult_words"]
     assert cenarios["en"]["word_levels"] == ["intermediate", "advanced"]
     assert opcoes["densities"] == ["low", "medium", "high"]
@@ -127,3 +128,39 @@ def test_options_exige_token(api):
 
 def test_options_aparece_no_openapi(api):
     assert "/filters/options" in api.get("/openapi.json").json()["paths"]
+
+
+# ---------- Cenário C (US11): vocabulário avançado com base português ----------
+
+CENARIO_C = {"base_language": "pt", "segment_types": ["advanced_vocabulary"], "density": "medium"}
+
+
+def test_cenario_c_e_aceito_pela_api_sem_word_level(api, make_user):
+    _, headers = make_user()
+    resposta = api.post("/filters", json=corpo(**CENARIO_C), headers=headers)
+    assert resposta.status_code == 201, resposta.text
+    assert resposta.json()["rules"] == CENARIO_C
+
+
+def test_base_portugues_aceita_phrasal_verbs_e_vocabulario_avancado_juntos():
+    regras = {**CENARIO_C, "segment_types": ["phrasal_verbs", "advanced_vocabulary"]}
+    assert FilterRules.model_validate(regras).model_dump() == regras
+
+
+@pytest.mark.parametrize(
+    "regras, trecho_da_mensagem",
+    [
+        ({**CENARIO_C, "word_level": "advanced"}, "word_level não se aplica"),
+        ({**CENARIO_C, "segment_types": ["advanced_vocabulary", "difficult_words"]}, "combinação não disponível"),
+    ],
+)
+def test_cenario_c_fora_da_tabela_responde_422(api, make_user, regras, trecho_da_mensagem):
+    _, headers = make_user()
+    resposta = api.post("/filters", json=corpo(**regras), headers=headers)
+    assert resposta.status_code == 422
+    assert trecho_da_mensagem in resposta.text
+
+
+def test_mensagem_lista_os_tipos_dos_dois_cenarios_em_portugues():
+    with pytest.raises(ValidationError, match="os tipos aceitos são: phrasal_verbs, advanced_vocabulary"):
+        FilterRules.model_validate({**CENARIO_C, "segment_types": ["difficult_words"]})

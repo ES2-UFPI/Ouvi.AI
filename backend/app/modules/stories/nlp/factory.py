@@ -8,7 +8,8 @@ from app.modules.stories.nlp.phrasal_verbs import PhrasalVerbDetector
 
 
 class DetectorFactory:
-    # Um novo tipo de trecho (palavras difíceis, vocabulário avançado) entra aqui com uma linha
+    # Um novo tipo de trecho entra aqui com uma linha. O vocabulário avançado (US11) não tem detector próprio:
+    # reaproveita as anotações de palavras difíceis do nível avançado (veja AdvancedVocabularyStrategy)
     _registry: dict[str, Callable[[], AnnotationDetector]] = {
         KIND_PHRASAL_VERB: PhrasalVerbDetector,
         KIND_DIFFICULT_WORD: DifficultWordDetector,
