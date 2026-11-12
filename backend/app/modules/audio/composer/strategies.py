@@ -21,7 +21,8 @@ class SwapStrategy(Protocol):
         ...
 
 
-def _is_aligned(annotation: "Annotation") -> bool:
+def is_aligned(annotation: "Annotation") -> bool:
+    """Só anotações com equivalente em português podem ser trocadas (e contam na densidade)."""
     return annotation.pt_start is not None and annotation.pt_end is not None and annotation.pt_text is not None
 
 
@@ -32,7 +33,7 @@ class PhrasalVerbStrategy:
     kind = KIND_PHRASAL_VERB
 
     def select(self, annotations: "Sequence[Annotation]", density: str) -> set[int]:
-        candidates = [a for a in annotations if a.kind == self.kind and _is_aligned(a)]
+        candidates = [a for a in annotations if a.kind == self.kind and is_aligned(a)]
         return {candidates[i].id for i in pick_evenly(len(candidates), density)}
 
 

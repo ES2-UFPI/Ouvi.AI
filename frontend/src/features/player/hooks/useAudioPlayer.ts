@@ -25,6 +25,11 @@ export function useAudioPlayer() {
     const onPause = () => setIsPlaying(false)
     // loadstart e waiting: está buscando dados; canplay e playing: já tem o que tocar
     const onBusy = () => setIsLoading(true)
+    // Nova faixa (próxima frase): o erro da anterior não vale mais
+    const onLoadStart = () => {
+      setIsLoading(true)
+      setError(null)
+    }
     const onReady = () => setIsLoading(false)
     const onError = () => {
       setIsLoading(false)
@@ -38,7 +43,7 @@ export function useAudioPlayer() {
       ['ended', onEnded],
       ['play', onPlay],
       ['pause', onPause],
-      ['loadstart', onBusy],
+      ['loadstart', onLoadStart],
       ['waiting', onBusy],
       ['canplay', onReady],
       ['playing', onReady],
@@ -78,7 +83,11 @@ export function useAudioPlayer() {
   }, [])
 
   const setSpeed = useCallback((value: number) => {
-    if (audioRef.current) audioRef.current.playbackRate = value
+    if (audioRef.current) {
+      audioRef.current.playbackRate = value
+      // Ao trocar de frase o navegador volta para a velocidade padrão: ela também precisa mudar
+      audioRef.current.defaultPlaybackRate = value
+    }
     setSpeedState(value)
   }, [])
 

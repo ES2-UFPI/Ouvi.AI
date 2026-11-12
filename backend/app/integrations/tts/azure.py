@@ -74,6 +74,10 @@ def _prepare_ssml(ssml: str, voice_id: str) -> bytes:
 
 
 class AzureTTSAdapter:
+    # Entram na chave do cache de áudio (US08): o Azure devolve MP3, não o WAV do provedor falso
+    provider_name = "azure"
+    audio_format = "mp3"
+
     def __init__(
         self,
         api_key: str,

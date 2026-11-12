@@ -344,3 +344,11 @@ def test_manual_sintetiza_uma_frase_com_troca_de_idioma(tmp_path):
     arquivo = tmp_path / "frase_bilingue.mp3"
     arquivo.write_bytes(resultado.data)
     print(f"\nÁudio salvo em {arquivo} ({resultado.duration_ms} ms). Abra para ouvir.")
+
+
+def test_informa_provedor_e_formato_para_a_chave_do_cache():
+    """O cache de áudio usa estes atributos: sem eles, o MP3 do Azure seria gravado como WAV."""
+    from app.integrations.tts.azure import AzureTTSAdapter
+
+    assert AzureTTSAdapter.provider_name == "azure"
+    assert AzureTTSAdapter.audio_format == "mp3"

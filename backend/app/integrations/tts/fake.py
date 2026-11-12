@@ -85,6 +85,10 @@ def _tone(frames: int, frequency: int) -> array:
 
 
 class FakeTTSProvider:
+    # Entram na chave do cache de áudio (US08): o mesmo SSML em outro fornecedor ou formato é outro áudio
+    provider_name = "fake"
+    audio_format = "wav"
+
     def __init__(self) -> None:
         self.calls: list[FakeCall] = []
 
