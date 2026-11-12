@@ -61,7 +61,9 @@ class PreviewService:
 
         # A mesma seleção que a geração de áudio usa: o que o usuário vê é o que ele ouve
         try:
-            selected = self.composer.select_swaps(segments, rules.segment_types, rules.density, rules.word_level)
+            selected = self.composer.select_swaps(
+                segments, rules.segment_types, rules.density, rules.word_level, rules.progression
+            )
             candidates = self.composer.count_candidates(segments, rules.segment_types, rules.word_level)
         except ValueError as exc:  # inclui UnknownSwapStrategyError (tipo de trecho sem estratégia)
             raise InvalidFilterRulesError(str(exc)) from exc

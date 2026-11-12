@@ -2,8 +2,12 @@
 
 Funções puras (sem banco): a mesma conta é espelhada no front (frontend/src/features/player/swaps.ts).
 """
+from dataclasses import dataclass, field
+
 import pytest
 
+from app.modules.audio.composer import AudioComposer
+from app.modules.stories.models import KIND_PHRASAL_VERB
 from app.modules.audio.composer.density import (
     PHASE_WEIGHTS,
     PROGRESSIONS,
@@ -73,6 +77,60 @@ def test_troca_pelo_menos_um_quando_ha_candidatos():
 def test_densidade_invalida_falha_mesmo_sem_candidatos():
     with pytest.raises(ValueError, match="densidade desconhecida"):
         pick_increasing([], "extreme")
+
+
+# ---------- integração com o AudioComposer (#112) ----------
+
+@dataclass
+class Anot:
+    id: int
+    kind: str = KIND_PHRASAL_VERB
+    en_start: int = 0
+    en_end: int = 1
+    en_text: str = "x"
+    pt_start: int | None = 0
+    pt_end: int | None = 1
+    pt_text: str | None = "y"
+    extra: dict = field(default_factory=dict)
+
+
+@dataclass
+class Frase:
+    id: int
+    position: int
+    annotations: list
+
+
+def historia(n_frases=30):
+    """Uma frase por anotação: o terço da anotação é o terço da sua frase."""
+    return [Frase(i + 1, i, [Anot(i + 1)]) for i in range(n_frases)]
+
+
+def test_composer_aplica_a_curva_por_terco_da_historia():
+    frases = historia(30)
+    selecionadas = AudioComposer().select_swaps(frases, ["phrasal_verbs"], "medium", progression="increasing")
+    inicio, meio, fim = (len([i for i in selecionadas if t * 10 < i <= (t + 1) * 10]) for t in range(3))
+    assert (inicio, meio, fim) == (2, 4, 5)
+
+
+def test_composer_sem_progressao_ou_constante_e_igual_a_de_antes():
+    frases = historia(30)
+    composer = AudioComposer()
+    antes = composer.select_swaps(frases, ["phrasal_verbs"], "medium")
+    assert composer.select_swaps(frases, ["phrasal_verbs"], "medium", progression="constant") == antes
+    assert composer.select_swaps(frases, ["phrasal_verbs"], "medium", progression="increasing") != antes
+
+
+def test_o_terco_e_o_da_frase_mesmo_fora_de_ordem():
+    frases = historia(9)
+    composer = AudioComposer()
+    esperado = composer.select_swaps(frases, ["phrasal_verbs"], "high", progression="increasing")
+    assert composer.select_swaps(list(reversed(frases)), ["phrasal_verbs"], "high", progression="increasing") == esperado
+
+
+def test_composer_recusa_progressao_desconhecida():
+    with pytest.raises(ValueError, match="progressão desconhecida"):
+        AudioComposer().select_swaps(historia(3), ["phrasal_verbs"], "high", progression="zigzag")
 
 
 def test_progressao_ausente_e_constante_e_desconhecida_falha():

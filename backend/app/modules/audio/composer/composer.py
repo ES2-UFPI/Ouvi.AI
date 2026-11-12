@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from xml.sax.saxutils import escape
 
+from app.modules.audio.composer.density import PROGRESSION_INCREASING, check_progression, phase_of
 from app.modules.audio.composer.strategies import SwapStrategyFactory, is_aligned
 from app.modules.audio.composer.swap import ComposedText, Swap
 
@@ -48,22 +49,37 @@ class AudioComposer:
         segment_types: Sequence[str],
         density: str,
         word_level: str | None = None,
+        progression: str | None = None,
     ) -> set[int]:
         """Ids das anotações que serão trocadas, calculados sobre a HISTÓRIA INTEIRA.
 
         `word_level` é o nível das palavras difíceis (filtro do Cenário B); os outros tipos o ignoram.
+        `progression` (US11): `increasing` aplica a curva de densidade crescente por terço da história;
+        ausente ou `constant`, a densidade é a mesma do começo ao fim.
 
         A prévia e a geração de áudio devem usar esta mesma função: assim o que o usuário vê é o que ele ouve.
         """
+        increasing = check_progression(progression) == PROGRESSION_INCREASING
+        ordered_segments = sorted(segments, key=lambda s: s.position)
         # Ordem de aparição (frase, depois posição na frase): faz parte do determinismo da escolha
         ordered = [
             annotation
-            for segment in sorted(segments, key=lambda s: s.position)
+            for segment in ordered_segments
             for annotation in sorted(segment.annotations, key=lambda a: (a.en_start, a.id))
         ]
+        # Terço da história de cada anotação, pela posição da sua frase (só na densidade crescente)
+        phases = (
+            {
+                annotation.id: phase_of(index, len(ordered_segments))
+                for index, segment in enumerate(ordered_segments)
+                for annotation in segment.annotations
+            }
+            if increasing
+            else None
+        )
         selected: set[int] = set()
         for segment_type in segment_types:
-            selected |= SwapStrategyFactory.create(segment_type, word_level).select(ordered, density)
+            selected |= SwapStrategyFactory.create(segment_type, word_level).select(ordered, density, phases)
         return selected
 
     def count_candidates(
