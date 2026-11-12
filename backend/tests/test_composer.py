@@ -333,7 +333,7 @@ def test_a_fabrica_devolve_a_estrategia_do_tipo_de_trecho_do_filtro():
 
 
 def test_a_fabrica_lista_os_tipos_disponiveis():
-    assert SwapStrategyFactory.types() == ["phrasal_verbs"]
+    assert SwapStrategyFactory.types() == ["difficult_words", "phrasal_verbs"]
 
 
 def test_a_fabrica_levanta_erro_claro_para_tipo_sem_estrategia():

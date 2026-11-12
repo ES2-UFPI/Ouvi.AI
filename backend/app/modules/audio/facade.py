@@ -110,7 +110,9 @@ class AudioGenerationFacade:
             logger.warning("%d frase(s) presa(s) em generating voltaram para a fila", recovered)
 
         # A seleção das trocas é feita sobre a HISTÓRIA INTEIRA (densidade), igual à prévia do texto
-        selected = self.composer.select_swaps(segments, rules["segment_types"], rules["density"])
+        selected = self.composer.select_swaps(
+            segments, rules["segment_types"], rules["density"], rules.get("word_level")
+        )
 
         # Cria antes todos os registros (`pending`): o status já mostra o total desde o começo
         assets = [

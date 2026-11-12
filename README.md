@@ -153,6 +153,31 @@ Cada entrada liga um phrasal verb às formas dele em português:
 - Trecho sem entrada no dicionário não se perde: fica gravado com os campos `pt_*` nulos e aparece no relatório do
   comando de anotação. Acrescente as formas e rode o comando de novo.
 
+## Palavras difíceis e Cenário B (US10)
+
+No Cenário B o idioma base é o inglês e as **palavras difíceis** são faladas em português pela mesma voz.
+
+- **Detector** (`nlp/difficult_words.py`, tipo `difficult_word` na `DetectorFactory`): substantivos, verbos,
+  adjetivos e advérbios cuja frequência no inglês (escala Zipf, a maior entre a forma e o lema) é menor que 4,0.
+  Nomes próprios, números e palavras vazias nunca entram. Nível `advanced` se Zipf < 3,4, senão `intermediate`.
+  Listas de exceção: `nlp/data/difficult_words_exclude.txt` (nunca entram) e `difficult_words_include.txt` (sempre).
+- **Frequências** (`nlp/data/en_word_frequency.txt`, ~400 KB, 28 mil palavras com Zipf ≥ 3; ausentes = raras):
+  geradas uma vez da biblioteca [wordfreq](https://github.com/rspeer/wordfreq) por
+  `python -m scripts.build_word_frequency`. A wordfreq **não** entra no `requirements.txt` (o pacote tem ~56 MB);
+  a imagem cresce só ~0,4 MB. Dados sob CC BY-SA 4.0 (Robyn Speer / Luminoso).
+- **Dicionário** (`nlp/data/pt_words.json`): lema de uma palavra → formas em português, mesmo formato de
+  `pt_equivalents.json`. As chaves não podem colidir com as dos phrasal verbs.
+- **Candidatos por história** (para revisar o dicionário): `python -m app.modules.stories.candidates [--level advanced]`.
+- **Anotação por tipo**: `python -m app.modules.stories.annotate --kind difficult_word` refaz só as palavras difíceis,
+  sem tocar nos phrasal verbs (e vice-versa). Sem `--kind`, todos os tipos. Na sobreposição o phrasal verb vence
+  (*dozed off* não gera a palavra *dozed*), e o relatório mostra, por tipo, detectados, alinhados, sem equivalente e
+  descartados.
+- **Filtro**: `{"base_language": "en", "segment_types": ["difficult_words"], "word_level": "intermediate", "density": "medium"}`.
+  As combinações permitidas estão em `SCENARIOS` (`modules/filters/schemas.py`) e em `GET /filters/options`.
+  `intermediate` troca as palavras dos dois níveis; `advanced`, só as raras.
+- Hoje o seed tem 40 candidatas, todas com equivalente (Lebre: 17, Patinho: 14, Raposa: 9); 2 são descartadas na
+  anotação por estarem dentro de phrasal verbs, ficando 38. A Raposa é curta demais para a meta de 15 por história.
+
 ## Trechos candidatos pela API
 
 `GET /stories/{id}/segments` (exige token) devolve as frases da história em ordem de `position`, cada uma com suas anotações em ordem de `en_start`.

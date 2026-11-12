@@ -6,6 +6,14 @@ from spacy.tokens import Token
 
 from app.modules.stories.models import KIND_DIFFICULT_WORD
 from app.modules.stories.nlp.base import DetectedSpan
+from app.modules.stories.nlp.levels import (  # noqa: F401 - reexportados para quem importa daqui
+    ADVANCED_MAX_ZIPF,
+    INTERMEDIATE_MAX_ZIPF,
+    LEVEL_ADVANCED,
+    LEVEL_INTERMEDIATE,
+    level_for,
+    levels_for_filter,
+)
 from app.modules.stories.nlp.spacy_model import get_english_model
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -13,16 +21,8 @@ FREQUENCY_FILE = DATA_DIR / "en_word_frequency.txt"
 EXCLUDE_FILE = DATA_DIR / "difficult_words_exclude.txt"
 INCLUDE_FILE = DATA_DIR / "difficult_words_include.txt"
 
-# Escala Zipf (log10 de ocorrências por bilhão de palavras): "house" ≈ 5,7; "tortoise" ≈ 3,3.
-# Abaixo de INTERMEDIATE_MAX_ZIPF a palavra é difícil para quem está no nível intermediário;
-# abaixo de ADVANCED_MAX_ZIPF ela é rara o bastante para desafiar também quem está no avançado.
-INTERMEDIATE_MAX_ZIPF = 4.0
-ADVANCED_MAX_ZIPF = 3.4
 # Palavras fora do arquivo de frequência (Zipf < 3) recebem este valor: são as mais raras
 UNKNOWN_ZIPF = 0.0
-
-LEVEL_INTERMEDIATE = "intermediate"
-LEVEL_ADVANCED = "advanced"
 
 # Só palavras de conteúdo. PROPN (nomes próprios), números, pronomes e preposições nunca entram.
 CONTENT_POS = frozenset({"NOUN", "VERB", "ADJ", "ADV"})
@@ -46,25 +46,6 @@ def load_word_list(path: Path) -> frozenset[str]:
     """Lê uma lista de lemas (um por linha; # começa um comentário)."""
     lines = (line.split("#", 1)[0].strip().lower() for line in path.read_text(encoding="utf-8").splitlines())
     return frozenset(line for line in lines if line)
-
-
-def level_for(zipf: float) -> str | None:
-    """Nível da palavra pela frequência, ou None se ela é comum demais para ser difícil."""
-    if zipf < ADVANCED_MAX_ZIPF:
-        return LEVEL_ADVANCED
-    if zipf < INTERMEDIATE_MAX_ZIPF:
-        return LEVEL_INTERMEDIATE
-    return None
-
-
-def levels_for_filter(word_level: str) -> frozenset[str]:
-    """Níveis de anotação que um filtro seleciona: o intermediário troca as pouco frequentes E as raras;
-    o avançado só as raras (por isso troca menos palavras)."""
-    if word_level == LEVEL_ADVANCED:
-        return frozenset({LEVEL_ADVANCED})
-    if word_level == LEVEL_INTERMEDIATE:
-        return frozenset({LEVEL_INTERMEDIATE, LEVEL_ADVANCED})
-    raise ValueError(f"nível desconhecido: {word_level!r}. Valores válidos: {LEVEL_INTERMEDIATE}, {LEVEL_ADVANCED}")
 
 
 class DifficultWordDetector:
