@@ -1,4 +1,5 @@
 """Camada Repository: único ponto de acesso aos dados deste módulo."""
+from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -170,11 +171,17 @@ class AnnotationRepository:
             self.db.refresh(annotation)
         return annotation
 
-    def delete_by_segment(self, segment_id: int, commit: bool = True) -> int:
-        """Apaga as anotações de uma frase e devolve quantas eram. Base da reanotação idempotente."""
-        result = self.db.execute(
-            delete(Annotation).where(Annotation.segment_id == segment_id)
-        )
+    def delete_by_segment(
+        self, segment_id: int, commit: bool = True, kinds: Sequence[str] | None = None
+    ) -> int:
+        """Apaga as anotações de uma frase e devolve quantas eram. Base da reanotação idempotente.
+
+        Com `kinds`, apaga só as anotações desses tipos: reanotar as palavras difíceis não apaga os
+        phrasal verbs, e o contrário também. Sem `kinds`, apaga todas."""
+        stmt = delete(Annotation).where(Annotation.segment_id == segment_id)
+        if kinds is not None:
+            stmt = stmt.where(Annotation.kind.in_(list(kinds)))
+        result = self.db.execute(stmt)
         if commit:
             self.db.commit()
         return result.rowcount

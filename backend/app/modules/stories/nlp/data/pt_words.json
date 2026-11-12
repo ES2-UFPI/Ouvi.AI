@@ -1,0 +1,20 @@
+{
+  "boast": ["se gabou", "se gabava", "gabou-se"],
+  "brag": ["se gabando", "se gabar", "gabar-se"],
+  "clumsy": ["desajeitado", "desajeitada"],
+  "countryside": ["campo", "interior"],
+  "doze": ["pegou no sono", "cochilou", "cochilando"],
+  "duckling": ["patinhos", "patinho"],
+  "grape": ["uvas", "uva"],
+  "hare": ["lebre", "lebres"],
+  "hatch": ["chocarem", "chocar", "nasceu"],
+  "hen": ["galinha", "galinhas"],
+  "owl": ["coruja", "corujas"],
+  "ripe": ["maduras", "madura", "maduros", "maduro"],
+  "sour": ["azedas", "azeda", "azedos", "azedo"],
+  "steadily": ["devagar e sempre", "sem parar"],
+  "swan": ["cisnes", "cisne"],
+  "tortoise": ["tartaruga", "tartarugas"],
+  "unkind": ["maus", "mau", "má", "cruéis"],
+  "vine": ["parreira", "videira"]
+}

@@ -413,7 +413,7 @@ def historias_reais(db_session):
 @pytest.mark.parametrize("densidade, esperado", [("low", 0.15), ("medium", 0.35), ("high", 0.60)])
 def test_historias_reais_trocam_a_fracao_pedida_e_geram_ssml_valido(historias_reais, densidade, esperado):
     for titulo, segmentos in historias_reais.items():
-        candidatos_reais = [a for s in segmentos for a in s.annotations if a.pt_start is not None]
+        candidatos_reais = [a for s in segmentos for a in s.annotations if a.pt_start is not None and a.kind == "phrasal_verb"]
         escolhidas = composer.select_swaps(segmentos, ["phrasal_verbs"], densidade)
 
         assert abs(len(escolhidas) - len(candidatos_reais) * esperado) <= 1, titulo

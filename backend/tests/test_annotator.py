@@ -229,7 +229,7 @@ def test_alinhamento_do_seed_aponta_para_o_lugar_marcado_pela_equipe(db_session)
     erros = []
     for titulo, sid in ids.items():
         segmentos = {s.id: s for s in SegmentRepository(db_session).list_by_story(sid)}
-        for a in anotacoes(db_session, sid):
+        for a in [a for a in anotacoes(db_session, sid) if a.kind == KIND_PHRASAL_VERB]:
             seg = segmentos[a.segment_id]
             assert a.pt_start is not None and seg.text_pt[a.pt_start : a.pt_end] == a.pt_text
             marcado = {pv.lemma: pv.pt for pv in seed[titulo].segments[seg.position].phrasal_verbs}[a.lemma]
