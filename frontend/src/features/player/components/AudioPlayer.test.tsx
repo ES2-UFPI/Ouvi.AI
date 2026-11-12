@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { AudioPlayer } from './AudioPlayer'
 
@@ -61,5 +61,18 @@ describe('AudioPlayer', () => {
     render(<AudioPlayer src="teste.mp3" />)
     expect(screen.getByLabelText('Progresso da faixa')).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Velocidade de reprodução' })).toBeInTheDocument()
+  })
+
+  it('avisa quando a faixa termina (para tocar a próxima frase)', () => {
+    const onEnded = vi.fn()
+    const { container } = render(<AudioPlayer src="frase1.wav" onEnded={onEnded} />)
+    fireEvent(container.querySelector('audio')!, new Event('ended'))
+    expect(onEnded).toHaveBeenCalledTimes(1)
+  })
+
+  it('sem áudio ainda, mostra a mensagem de espera no lugar do carregamento', () => {
+    const { container } = render(<AudioPlayer src={null} waitingMessage="Gerando o áudio da próxima frase..." />)
+    expect(container.querySelector('audio')).not.toHaveAttribute('src')
+    expect(screen.getByRole('status')).toHaveTextContent('Gerando o áudio da próxima frase...')
   })
 })
