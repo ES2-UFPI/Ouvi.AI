@@ -53,7 +53,7 @@ class DifficultWordStrategy:
         candidates = [
             a
             for a in annotations
-            if a.kind == self.kind and _is_aligned(a) and (a.extra or {}).get("level") in self.levels
+            if a.kind == self.kind and is_aligned(a) and (a.extra or {}).get("level") in self.levels
         ]
         return {candidates[i].id for i in pick_evenly(len(candidates), density)}
 

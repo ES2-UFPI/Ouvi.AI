@@ -116,16 +116,34 @@ def test_anotacao_sem_equivalente_em_portugues_nunca_vira_troca(api, cenario):
 
 
 def test_com_idioma_base_ingles_o_texto_e_o_ingles_e_o_falado_e_o_portugues(api, make_user, db_session):
+    """Cenário B (US10): idioma base inglês com palavras difíceis faladas em português."""
     _, headers = make_user()
-    story_id = criar_historia(db_session)
-    filter_id = criar_filtro(api, headers, story_id, base="en", densidade="high")
+    story = StoryRepository(db_session).create("Prévia em inglês", None, "en")
+    frases = [
+        ("The famished fox looked at the grapes.", "A raposa faminta olhou as uvas.", ("famished", "faminta")),
+        ("She was weary after the trip.", "Ela estava exausta depois da viagem.", ("weary", "exausta")),
+    ]
+    for posicao, (en, pt, (palavra_en, palavra_pt)) in enumerate(frases):
+        segmento = SegmentRepository(db_session).create(story.id, posicao, en, pt)
+        es, ps = en.index(palavra_en), pt.index(palavra_pt)
+        AnnotationRepository(db_session).create(
+            segmento, "difficult_word", palavra_en, es, es + len(palavra_en), ps, ps + len(palavra_pt),
+            extra={"level": "advanced"},
+        )
+    corpo_filtro = {
+        "story_id": story.id,
+        "rules": {"base_language": "en", "segment_types": ["difficult_words"], "word_level": "intermediate", "density": "high"},
+    }
+    resposta = api.post("/filters", json=corpo_filtro, headers=headers)
+    assert resposta.status_code == 201, resposta.text
 
-    corpo = previa(api, headers, story_id, filter_id).json()
+    corpo = previa(api, headers, story.id, resposta.json()["id"]).json()
 
-    assert [s["text"] for s in corpo["segments"]] == [en for en, _, _ in FRASES]
+    assert [s["text"] for s in corpo["segments"]] == [en for en, _, _ in frases]
     trocas = [t for s in corpo["segments"] for t in s["swaps"]]
-    assert len(trocas) == 2 and all(t["lang"] == "pt-BR" for t in trocas)
-    assert {(t["text"], t["spoken"]) for t in trocas} == {("woke up", "acordou"), ("gave up", "desistiram")}
+    assert trocas and all(t["lang"] == "pt-BR" for t in trocas)
+    assert {(t["text"], t["spoken"]) for t in trocas} <= {("famished", "faminta"), ("weary", "exausta")}
+    assert corpo["totals"]["candidates"] == 2
 
 
 def test_as_frases_vem_em_ordem_mesmo_criadas_fora_de_ordem(api, make_user, db_session):
@@ -210,7 +228,7 @@ def test_tipo_de_trecho_sem_estrategia_de_troca_responde_422(api, cenario, monke
     """O filtro passa a aceitar um tipo novo antes de existir a estratégia dele: erro claro, e não 500."""
     from app.modules.audio.composer import AudioComposer, UnknownSwapStrategyError
 
-    def sem_estrategia(self, segments, segment_types, density):
+    def sem_estrategia(self, segments, segment_types, density, word_level=None):
         raise UnknownSwapStrategyError("Tipo de trecho sem estratégia de troca: 'difficult_words'")
 
     monkeypatch.setattr(AudioComposer, "select_swaps", sem_estrategia)
