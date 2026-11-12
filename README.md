@@ -198,9 +198,14 @@ mostra "O áudio desta história ainda não foi gerado." no player.
 A tag `<audio>` do navegador não envia o header `Authorization`, então o áudio é entregue por uma URL
 assinada (HMAC-SHA256) de curta duração, em duas etapas:
 
-1. O front chama `GET /audio/url?key=<chave>` **com o token** e recebe `{"url": ..., "expires_at": ...}`.
+1. O front chama `GET /audio/segments/{segment_id}?filter_id=<id>` **com o token** e recebe
+   `{"url": ..., "expires_at": ..., "segment_id": ..., "duration_ms": ..., "format": "wav"}`. A rota confere que o
+   filtro é do usuário (veja "Geração do áudio" abaixo).
 2. O front põe essa `url` no `src` do `<audio>`. Ela aponta para `GET /audio/stream`, que **não exige token**:
    a assinatura basta.
+
+`GET /audio/url?key=<chave>`, que assina uma chave **qualquer** do armazenamento, só funciona com
+`APP_ENV=development` (fora dele responde `404`). Serve ao áudio de exemplo do player enquanto ele não usa a rota por frase.
 
 `GET /audio/stream` suporta o header `Range`, para o player pular para o meio sem baixar o arquivo todo:
 
@@ -222,6 +227,82 @@ Para testar com `curl`, gere uma URL em `GET /audio/url` (pelo `/docs`, depois d
 ```bash
 curl -s -o /dev/null -D - -H "Range: bytes=0-99" "<url>"
 ```
+
+## Geração do áudio (AudioGenerationFacade)
+
+A `AudioGenerationFacade` (`backend/app/modules/audio/facade.py`) gera o áudio de uma história com um filtro: para
+cada frase, em ordem, compõe o SSML (AudioComposer), sintetiza (TTS), grava no armazenamento e marca o `AudioAsset`
+como `ready`. Erros recuperáveis do TTS são tentados de novo; uma frase que falha de vez fica `failed` sem derrubar
+as outras. Gerar de novo não refaz o que já está pronto, e frases presas em `generating` voltam para a fila.
+
+Todas as rotas exigem token; filtro inexistente ou de outro usuário responde `404`, e filtro de outra história, `422`.
+
+| Rota | O que faz |
+|---|---|
+| `POST /stories/{story_id}/audio` com `{"filter_id": 3}` | dispara a geração em segundo plano e responde `202` com o status. Durante a geração não dispara outra (`202`); com tudo pronto responde `200` |
+| `GET /stories/{story_id}/audio/status?filter_id=3` | progresso, para o front consultar por polling |
+| `GET /audio/segments/{segment_id}?filter_id=3` | URL assinada do áudio da frase; `409` se ainda não está pronto ou se falhou |
+
+Resposta do `POST` e do `status`:
+
+```json
+{
+  "story_id": 1, "filter_id": 3, "state": "generating", "total": 12, "ready": 5, "failed": 0,
+  "segments": [{"segment_id": 7, "position": 0, "status": "ready", "duration_ms": 2340, "error": null}]
+}
+```
+
+`state` é `pending` (nada em andamento), `generating`, `ready` (todas prontas) ou `failed` (terminou com alguma frase
+em falha; um novo `POST` tenta de novo só as que falharam). `status` de cada frase: `pending`, `generating`, `ready`
+ou `failed`.
+
+## Cache de áudio (US08)
+
+O TTS cobra por caractere, então o mesmo conteúdo é sintetizado **uma única vez**, para qualquer filtro e
+qualquer usuário. A identidade de um arquivo é a **chave de cache** (`backend/app/modules/audio/cache/key.py`):
+
+```python
+build_cache_key(ssml, voice_id, provider, audio_format)  # SHA-256 em hexadecimal (64 caracteres)
+```
+
+- Entram o SSML **normalizado** (espaços repetidos fora das tags viram um só; os das pontas saem), a voz, o
+  fornecedor do TTS, o formato do áudio e a `CACHE_KEY_VERSION`. O idioma está no próprio SSML (`xml:lang`).
+- Não entram usuário, filtro nem história: uma frase sem troca de idioma tem o mesmo SSML em qualquer filtro.
+- Mudar o texto, as trocas, o idioma, a voz, o fornecedor ou o formato gera outra chave, e portanto outro áudio.
+- Mudou a forma de calcular a chave? Suba a `CACHE_KEY_VERSION`: as chaves antigas deixam de bater.
+
+Cada arquivo do cache é um registro `AudioBlob` (tabela `audio_blobs`: chave única, chave do arquivo no
+armazenamento, formato, duração, tamanho, caracteres, acertos, erros, criação e último uso). O `AudioAsset` de
+cada frase aponta para o blob pela coluna `blob_id`.
+
+Na geração (`AudioGenerationFacade`), depois de compor o SSML de cada frase, o `AudioCache` calcula a chave e:
+
+- **acerto**: o blob existe e o arquivo está no armazenamento. O `AudioAsset` aponta para ele e fica `ready`, sem
+  chamar o TTS (o blob soma um acerto e atualiza o último uso);
+- **erro**: sintetiza, grava em `cache/<2 primeiros>/<chave>.<formato>` e só depois registra o blob. Uma falha no
+  meio deixa no máximo um arquivo órfão, nunca um registro apontando para um arquivo inexistente;
+- **arquivo sumido**: o blob existe mas o arquivo não; a frase é sintetizada de novo e o registro é corrigido.
+
+Dois pedidos simultâneos da mesma frase nova fazem uma única chamada ao TTS: um lock consultivo do Postgres
+(`pg_advisory_xact_lock`) por chave faz o segundo esperar o primeiro e encontrar o blob pronto. O log mostra os
+acertos e erros de cada frase e, no fim, o total de caracteres economizados.
+
+Comandos (rode dentro de `backend/`):
+
+```bash
+# Estatísticas: arquivos, tamanho, acertos, erros, taxa de acerto, caracteres economizados e custo evitado
+python -m app.modules.audio.cache stats          # --json para a mesma informação em JSON
+# Limpeza: sem opções não apaga nada; --dry-run só mostra o relatório
+python -m app.modules.audio.cache purge --older-than 30 --dry-run   # sem uso há mais de 30 dias
+python -m app.modules.audio.cache purge --max-size 500MB            # os menos usados até caber em 500 MB
+```
+
+- O custo evitado usa `TTS_COST_PER_1K_CHARS` (preço do fornecedor por 1.000 caracteres; padrão `0`, e então o
+  custo aparece zerado). O `stats` só lê o banco. Os contadores são do cache atual: um blob apagado pela limpeza
+  leva os seus junto.
+- A limpeza devolve para `pending` os áudios de frase que usavam o blob (gerar de novo recria o áudio), apaga o
+  registro e só depois apaga o arquivo. Se apagar o arquivo falhar, sobra um arquivo órfão, nunca um registro
+  apontando para um arquivo inexistente.
 
 ## Provedor de TTS (síntese de voz)
 
@@ -303,6 +384,38 @@ Para **ver** a composição das histórias reais (precisa do seed e da anotaçã
 docker compose exec api python -m scripts.compose_demo --density high
 docker compose exec api python -m scripts.compose_demo --story 2 --density low --ssml
 ```
+
+## Prévia do texto com as trocas
+
+`GET /stories/{story_id}/preview?filter_id=<id>` (exige token) mostra **o que vai mudar de idioma** sem gerar áudio: não
+gasta TTS e não grava nada no banco. O front usa esta rota para exibir o texto e destacar os trechos, em vez de calcular a
+seleção por conta própria: ela usa o mesmo `AudioComposer` da geração de áudio, então o que o usuário vê é o que ele ouve.
+
+```json
+{
+  "story": {"id": 1, "title": "A Raposa e as Uvas", "language": "en"},
+  "rules": {"base_language": "pt", "segment_types": ["phrasal_verbs"], "density": "high"},
+  "totals": {"segments": 12, "candidates": 9, "swapped": 5},
+  "segments": [
+    {"id": 7, "position": 8, "text": "Um passarinho viu a raposa desistir e voou para longe.",
+     "swaps": [{"start": 27, "end": 35, "text": "desistir", "spoken": "give up", "lang": "en-US", "annotation_id": 31}]}
+  ]
+}
+```
+
+- `text` é a frase no **idioma base do filtro**, sem marcação. Em cada troca, `text[start:end]` é o trecho que muda de idioma,
+  e `spoken` é o que será falado no lugar dele (em `lang`).
+- `totals`: `candidates` são os trechos que poderiam ser trocados (têm equivalente em português), e `swapped` é a soma dos
+  `swaps` de todas as frases.
+- O mesmo filtro devolve sempre a mesma prévia. As frases vêm em ordem de `position`.
+
+| Resposta | Quando |
+|---|---|
+| `401` | sem token |
+| `404` | história inexistente, ou filtro inexistente ou de outro usuário |
+| `422` | filtro criado para outra história, regras do filtro inválidas ou `filter_id` ausente |
+
+O contrato completo está no `/docs` (Swagger), com os schemas `PreviewRead` e `SwapRead`.
 
 ## Filtro de Audição e player (front)
 

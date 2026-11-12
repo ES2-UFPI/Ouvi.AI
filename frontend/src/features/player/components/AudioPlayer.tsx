@@ -3,15 +3,34 @@ import { SPEEDS, useAudioPlayer } from '../hooks/useAudioPlayer'
 import { formatTime } from '../formatTime'
 
 interface AudioPlayerProps {
-  src: string
+  // null: ainda não há o que tocar (ex.: a próxima frase está sendo gerada)
+  src: string | null
   title?: string
   // Etiquetas com o resumo do filtro escolhido (opcional)
   chips?: string[]
+  // Toca sozinho cada nova faixa (usado para emendar as frases)
+  autoPlay?: boolean
+  onEnded?: () => void
+  // Linha de progresso abaixo do título (ex.: "Frase 3 de 12 · Gerando áudio: 5/12 frases")
+  subtitle?: string
+  // Mensagem de espera no lugar de "Carregando áudio..." (ex.: "Gerando o áudio da próxima frase...")
+  waitingMessage?: string | null
+  // Aviso discreto (ex.: frases puladas)
+  notice?: string | null
 }
 
 const formatSpeed = (value: number) => `${String(value).replace('.', ',')}x`
 
-export function AudioPlayer({ src, title, chips = [] }: AudioPlayerProps) {
+export function AudioPlayer({
+  src,
+  title,
+  chips = [],
+  autoPlay = false,
+  onEnded,
+  subtitle,
+  waitingMessage,
+  notice,
+}: AudioPlayerProps) {
   const {
     audioRef,
     isPlaying,
@@ -35,7 +54,7 @@ export function AudioPlayer({ src, title, chips = [] }: AudioPlayerProps) {
 
   return (
     <div className="rounded-2xl bg-bg-surface border border-border-subtle p-7 shadow-2xl shadow-black/40">
-      <audio ref={audioRef} src={src} preload="metadata" />
+      <audio ref={audioRef} src={src ?? undefined} preload="metadata" autoPlay={autoPlay} onEnded={onEnded} />
 
       <div className="flex items-center gap-3 mb-1">
         <span
@@ -49,6 +68,7 @@ export function AudioPlayer({ src, title, chips = [] }: AudioPlayerProps) {
         </span>
         {title && <h2 className="font-display text-2xl text-text-primary leading-tight">{title}</h2>}
       </div>
+      {subtitle && <p className="text-sm text-text-muted mt-1">{subtitle}</p>}
 
       {chips.length > 0 ? (
         <ul className="flex flex-wrap gap-2 mt-4 mb-7" aria-label="Filtro escolhido">
@@ -149,13 +169,19 @@ export function AudioPlayer({ src, title, chips = [] }: AudioPlayerProps) {
           <p role="alert" style={{ color: 'var(--color-accent-pt)' }}>
             {error}
           </p>
+        ) : waitingMessage ? (
+          <p role="status" className="text-text-muted">
+            {waitingMessage}
+          </p>
         ) : (
-          isLoading && (
+          isLoading &&
+          src && (
             <p role="status" className="text-text-muted">
               Carregando áudio...
             </p>
           )
         )}
+        {notice && <p className="text-text-muted mt-1">{notice}</p>}
       </div>
     </div>
   )

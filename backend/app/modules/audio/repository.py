@@ -67,6 +67,15 @@ class AudioAssetRepository:
         # populate_existing: se o objeto já estava na sessão, traz o estado atual do banco
         return self.db.scalars(stmt.execution_options(populate_existing=True)).one()
 
+    def get_by_segment(self, segment_id: int, *, rules_hash: str, voice_id: str) -> AudioAsset | None:
+        """Áudio da frase para as regras e a voz, ou None se a geração ainda não chegou nela."""
+        stmt = select(AudioAsset).where(
+            AudioAsset.segment_id == segment_id,
+            AudioAsset.rules_hash == rules_hash,
+            AudioAsset.voice_id == voice_id,
+        )
+        return self.db.scalar(stmt)
+
     def list_by_story(self, story_id: int, *, rules_hash: str, voice_id: str) -> list[AudioAsset]:
         """Áudios da história para as regras e a voz, na ordem das frases."""
         stmt = (
@@ -87,8 +96,16 @@ class AudioAssetRepository:
         """pending/failed -> generating, contando mais uma tentativa."""
         self._transition(asset, STATUS_GENERATING, attempts=AudioAsset.attempts + 1)
 
-    def mark_ready(self, asset: AudioAsset, *, storage_key: str, audio_format: str, duration_ms: int) -> None:
-        """generating -> ready, com o arquivo gravado no armazenamento."""
+    def mark_ready(
+        self,
+        asset: AudioAsset,
+        *,
+        storage_key: str,
+        audio_format: str,
+        duration_ms: int,
+        blob_id: int | None = None,
+    ) -> None:
+        """generating -> ready, com o arquivo gravado no armazenamento (e o blob do cache de onde ele veio)."""
         if not storage_key or not audio_format:
             raise ValueError("storage_key e audio_format são obrigatórios")
         if duration_ms < 0:
@@ -99,6 +116,7 @@ class AudioAssetRepository:
             storage_key=storage_key,
             format=audio_format,
             duration_ms=duration_ms,
+            blob_id=blob_id,
             error=None,
         )
 
