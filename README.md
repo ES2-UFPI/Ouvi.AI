@@ -275,6 +275,18 @@ Cada arquivo do cache é um registro `AudioBlob` (tabela `audio_blobs`: chave ú
 armazenamento, formato, duração, tamanho, caracteres, acertos, erros, criação e último uso). O `AudioAsset` de
 cada frase aponta para o blob pela coluna `blob_id`.
 
+Na geração (`AudioGenerationFacade`), depois de compor o SSML de cada frase, o `AudioCache` calcula a chave e:
+
+- **acerto**: o blob existe e o arquivo está no armazenamento. O `AudioAsset` aponta para ele e fica `ready`, sem
+  chamar o TTS (o blob soma um acerto e atualiza o último uso);
+- **erro**: sintetiza, grava em `cache/<2 primeiros>/<chave>.<formato>` e só depois registra o blob. Uma falha no
+  meio deixa no máximo um arquivo órfão, nunca um registro apontando para um arquivo inexistente;
+- **arquivo sumido**: o blob existe mas o arquivo não; a frase é sintetizada de novo e o registro é corrigido.
+
+Dois pedidos simultâneos da mesma frase nova fazem uma única chamada ao TTS: um lock consultivo do Postgres
+(`pg_advisory_xact_lock`) por chave faz o segundo esperar o primeiro e encontrar o blob pronto. O log mostra os
+acertos e erros de cada frase e, no fim, o total de caracteres economizados.
+
 ## Provedor de TTS (síntese de voz)
 
 A voz é gerada por um provedor de TTS escolhido por configuração. O código usa sempre a interface `TTSProvider`
