@@ -447,6 +447,27 @@ docker compose exec api python -m pytest --cov=app --cov-report=term-missing:ski
 - Os testes de API usam a fixture `api` (cliente HTTP com a autenticação **real**) e `make_user` (cria um usuário pela
   própria API), definidas em `backend/tests/conftest.py`.
 
+**Pipeline de áudio (NLP → TTS → armazenamento) e API de áudio.** Cada camada tem o seu arquivo e
+`tests/test_audio_pipeline.py` testa o fluxo inteiro, como o front o percorre (cadastro, login, filtro, prévia,
+geração, status e download de cada frase com `Range`):
+
+| Arquivo | O que cobre |
+|---|---|
+| `test_tts.py`, `test_composer.py`, `test_story_preview.py` | provedor de TTS, composição do SSML, prévia das trocas |
+| `test_audio_facade.py`, `test_audio_cache*.py` | Facade (retentativas, frases presas, falha por frase) e cache global |
+| `test_audio_generation_api.py`, `test_audio_stream.py` | `POST/GET` de geração e status, URL assinada e `Range` |
+| `test_audio_pipeline.py` | ponta a ponta: a prévia mostra o que o TTS recebe, o WAV tem o tom do idioma base e o da troca só onde a prévia manda, falha de uma frase não derruba as outras, outro usuário reaproveita o cache |
+
+```bash
+docker compose exec api python -m pytest tests/test_audio_pipeline.py -v
+# cobertura de cada módulo (a meta é 80% ou mais em ambos)
+docker compose exec api python -m pytest --cov=app.modules.audio --cov-report=term-missing:skip-covered
+docker compose exec api python -m pytest --cov=app.modules.stories --cov-report=term-missing:skip-covered
+```
+
+Esses testes não usam rede, chave nem MinIO (`FakeTTSProvider` + `InMemoryStorage`), e as contagens são sempre da
+história do próprio teste, então não dependem dos áudios que já existam no seu banco de desenvolvimento.
+
 **Frontend** (Vitest + Testing Library):
 
 ```bash
