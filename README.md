@@ -296,6 +296,51 @@ frase com troca de idioma, confere a duração e salva o MP3 para ouvir. Ele só
 
 ```
 .\venv\Scripts\python.exe -m pytest -m tts_real -s
+
+## Composição do áudio (AudioComposer)
+
+O `AudioComposer` (`backend/app/modules/audio/composer/`) decide **o que muda de idioma** em cada frase e monta o texto
+com marcação SSML que vai ao TTS. Ele não usa rede, banco nem TTS: recebe frases e anotações e devolve texto, por isso é
+fácil de testar.
+
+```python
+from app.modules.audio.composer import AudioComposer
+
+composer = AudioComposer()
+# 1) escolhe os trechos trocados na HISTÓRIA INTEIRA (o que a densidade do filtro pede)
+selected = composer.select_swaps(segments, ["phrasal_verbs"], "medium")
+# 2) compõe cada frase
+composed = composer.compose(segment, selected, "pt")
+composed.ssml   # <speak version="1.0" xml:lang="pt-BR">A raposa <lang xml:lang="en-US">gave up</lang> das uvas.</speak>
+composed.text   # "A raposa desistiu das uvas."  (o texto que aparece na tela, sem marcação)
+composed.swaps  # [Swap(start=9, end=17, text="desistiu", spoken="gave up", lang="en-US", annotation_id=1)]
+```
+
+**Densidade.** É a fração dos phrasal verbs **da história inteira** (e não por frase) que muda de idioma:
+
+| Densidade | Fração trocada | Exemplo, história com 20 trechos |
+|---|---|---|
+| `low` (baixa) | 15% | 3 trechos |
+| `medium` (média) | 35% | 7 trechos |
+| `high` (alta) | 60% | 12 trechos |
+
+As frações são constantes (`DENSITY_SHARE`, em `density.py`). Só entram os trechos que **têm equivalente em português**
+(o campo `pt_*` preenchido), e só eles contam na fração.
+
+**Determinismo.** A escolha não usa sorteio: os trechos escolhidos ficam no meio de faixas iguais da história (o 1º, o 4º, o 7º...,
+espaçados de forma regular). O mesmo filtro e a mesma história geram sempre o mesmo SSML, o que o cache de áudio exige.
+
+**Direção.** Com `base_language="pt"` o português fica na tela e os trechos são falados em inglês (`en-US`). Com `"en"` é o
+inverso (os trechos são falados em `pt-BR`). O `Swap` informa as posições no texto exibido, para o front destacar o trecho.
+
+**Novos tipos de trecho.** O filtro usa `phrasal_verbs` (plural) e a anotação usa `phrasal_verb` (singular): a `SwapStrategyFactory`
+liga um ao outro. Um tipo novo entra com uma `SwapStrategy` e uma linha na fábrica.
+
+Para **ver** a composição das histórias reais (precisa do seed e da anotação), sem escrever código:
+
+```bash
+docker compose exec api python -m scripts.compose_demo --density high
+docker compose exec api python -m scripts.compose_demo --story 2 --density low --ssml
 ```
 
 ## Filtro de Audição e player (front)
@@ -347,6 +392,18 @@ O workflow `.github/workflows/ci.yml` roda a cada pull request e a cada push na 
 
 Regra da equipe: **um PR só é mergeado com os dois jobs verdes** (confira a aba *Checks* do PR). Para reproduzir a CI
 na sua máquina, rode os comandos acima antes de abrir o PR.
+
+### Proteção da `develop` e da `main`
+
+O ruleset **"Regras de Merge"** (*Settings > Rules > Rulesets*) vale para a `develop` e para a `main`, sem exceções
+(nem para administradores):
+
+- **Só por pull request, com 1 aprovação de outra pessoa.** Push direto na branch é recusado, e o GitHub não deixa
+  aprovar o próprio PR. Peça a revisão em *Reviewers* ao abrir o PR.
+- **Não é possível apagar a branch nem fazer force push.**
+
+Fluxo: o autor abre o PR, outra pessoa revisa e aprova, e o **autor** faz o merge. Os jobs verdes da CI continuam sendo
+regra da equipe, mas não bloqueiam o merge no GitHub: confira antes de mergear.
 
 ### TDD: como escrevemos código novo
 

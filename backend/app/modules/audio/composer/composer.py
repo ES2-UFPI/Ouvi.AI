@@ -1,0 +1,123 @@
+"""AudioComposer: decide O QUE muda de idioma em cada frase e monta o texto com marcação SSML.
+
+Não usa rede, banco nem TTS: recebe frases e anotações e devolve texto, o que o deixa fácil de testar.
+O mesmo código serve a qualquer direção: com o português como base, os trechos são falados em inglês;
+com o inglês como base (Cenário B), os trechos são falados em português.
+"""
+from collections.abc import Collection, Iterable, Sequence
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+from xml.sax.saxutils import escape
+
+from app.modules.audio.composer.strategies import SwapStrategyFactory
+from app.modules.audio.composer.swap import ComposedText, Swap
+
+if TYPE_CHECKING:
+    from app.modules.stories.models import Annotation, Segment
+
+
+@dataclass(frozen=True)
+class _Direction:
+    base_lang: str  # idioma do <speak>
+    swapped_lang: str  # idioma dos trechos trocados (<lang>)
+
+    text_attr: str  # campo da frase com o texto base
+    start_attr: str  # posições do trecho no texto base
+    end_attr: str
+    original_attr: str  # campo da anotação com o trecho no texto base (para conferir as posições)
+    spoken_attr: str  # campo da anotação com o que é falado no lugar
+
+
+_DIRECTIONS = {
+    "pt": _Direction("pt-BR", "en-US", "text_pt", "pt_start", "pt_end", "pt_text", "en_text"),
+    "en": _Direction("en-US", "pt-BR", "text_en", "en_start", "en_end", "en_text", "pt_text"),
+}
+
+# O texto vai DENTRO do XML: além de & < >, as aspas também são escapadas
+_ESCAPES = {'"': "&quot;", "'": "&apos;"}
+
+
+def _escape(text: str) -> str:
+    return escape(text, _ESCAPES)
+
+
+class AudioComposer:
+    def select_swaps(self, segments: "Iterable[Segment]", segment_types: Sequence[str], density: str) -> set[int]:
+        """Ids das anotações que serão trocadas, calculados sobre a HISTÓRIA INTEIRA.
+
+        A prévia e a geração de áudio devem usar esta mesma função: assim o que o usuário vê é o que ele ouve.
+        """
+        # Ordem de aparição (frase, depois posição na frase): faz parte do determinismo da escolha
+        ordered = [
+            annotation
+            for segment in sorted(segments, key=lambda s: s.position)
+            for annotation in sorted(segment.annotations, key=lambda a: (a.en_start, a.id))
+        ]
+        selected: set[int] = set()
+        for segment_type in segment_types:
+            selected |= SwapStrategyFactory.create(segment_type).select(ordered, density)
+        return selected
+
+    def compose(self, segment: "Segment", selected: Collection[int], base_language: str) -> ComposedText:
+        """Monta o SSML da frase, trocando só as anotações cujos ids estão em `selected`."""
+        try:
+            direction = _DIRECTIONS[base_language]
+        except KeyError:
+            valid = ", ".join(_DIRECTIONS)
+            raise ValueError(f"idioma base desconhecido: {base_language!r}. Valores válidos: {valid}") from None
+
+        text = getattr(segment, direction.text_attr)
+        swaps = self._swaps(segment, selected, direction, text)
+
+        parts: list[str] = []
+        cursor = 0
+        for swap in swaps:
+            parts.append(_escape(text[cursor : swap.start]))
+            parts.append(f'<lang xml:lang="{swap.lang}">{_escape(swap.spoken)}</lang>')
+            cursor = swap.end
+        parts.append(_escape(text[cursor:]))
+
+        ssml = f'<speak version="1.0" xml:lang="{direction.base_lang}">{"".join(parts)}</speak>'
+        return ComposedText(ssml=ssml, text=text, swaps=swaps)
+
+    def _swaps(
+        self, segment: "Segment", selected: Collection[int], direction: _Direction, text: str
+    ) -> list[Swap]:
+        swaps: list[Swap] = []
+        for annotation in self._chosen(segment, selected):
+            start = getattr(annotation, direction.start_attr)
+            end = getattr(annotation, direction.end_attr)
+            original = getattr(annotation, direction.original_attr)
+            if text[start:end] != original:
+                # A frase mudou depois da anotação: trocar assim estragaria o texto. Melhor falhar alto.
+                raise ValueError(
+                    f"As posições da anotação {annotation.id} não batem com o texto da frase {segment.id}: "
+                    "reanote a história"
+                )
+            swaps.append(
+                Swap(
+                    start=start,
+                    end=end,
+                    text=original,
+                    spoken=getattr(annotation, direction.spoken_attr),
+                    lang=direction.swapped_lang,
+                    annotation_id=annotation.id,
+                )
+            )
+
+        # Em ordem de posição; se dois trechos se sobrepõem, vale o primeiro
+        swaps.sort(key=lambda s: (s.start, s.end, s.annotation_id))
+        kept: list[Swap] = []
+        for swap in swaps:
+            if not kept or swap.start >= kept[-1].end:
+                kept.append(swap)
+        return kept
+
+    @staticmethod
+    def _chosen(segment: "Segment", selected: Collection[int]) -> "list[Annotation]":
+        """As anotações escolhidas desta frase que têm equivalente em português (as outras nunca são trocadas)."""
+        return [
+            a
+            for a in segment.annotations
+            if a.id in selected and a.pt_start is not None and a.pt_end is not None and a.pt_text is not None
+        ]
