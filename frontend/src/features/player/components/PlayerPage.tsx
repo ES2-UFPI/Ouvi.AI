@@ -1,41 +1,42 @@
-import axios from 'axios'
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { getFilter } from '../../filters/api'
 import { DENSITY_LABELS, LANGUAGE_LABELS, SEGMENT_LABELS } from '../../filters/labels'
 import { PageLayout } from '../../../shared/components/PageLayout'
 import { getStorySegments, listStories } from '../../stories/api'
-import { audioKeyForStory, getAudioUrl } from '../api'
+import { useGeneratedAudio } from '../hooks/useGeneratedAudio'
 import { AudioPlayer } from './AudioPlayer'
 import { selectSwapIds } from '../swaps'
 import { BilingualText } from './BilingualText'
 
 export function PlayerPage() {
+  const { storyId } = useParams<{ storyId: string }>()
+  const [searchParams] = useSearchParams()
+  // Outra história ou outro filtro: recomeça do zero (polling, frase atual e URLs)
+  return <PlayerPageContent key={`${storyId}-${searchParams.get('filter')}`} />
+}
+
+function PlayerPageContent() {
   const { storyId: storyParam } = useParams<{ storyId: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
 
   const storyId = Number(storyParam)
-  const filterId = Number(searchParams.get('filter'))
+  const filterParam = Number(searchParams.get('filter'))
+  const filterId = Number.isInteger(filterParam) && filterParam > 0 ? filterParam : null
   const validStory = Number.isInteger(storyId) && storyId > 0
 
   const stories = useQuery({ queryKey: ['stories'], queryFn: listStories })
   const filter = useQuery({
     queryKey: ['filter', filterId],
-    queryFn: () => getFilter(filterId),
-    enabled: Number.isInteger(filterId) && filterId > 0,
+    queryFn: () => getFilter(filterId as number),
+    enabled: filterId !== null,
     retry: false,
   })
-  // A URL assinada vale por uma hora: guardá-la em cache evita pedir outra a cada visita
-  const audio = useQuery({
-    queryKey: ['audio-url', storyId],
-    queryFn: () => getAudioUrl(audioKeyForStory(storyId)),
-    enabled: validStory,
-    retry: false,
-    staleTime: 30 * 60 * 1000,
-  })
+  // Gera o áudio com o filtro e toca frase a frase, conforme cada uma fica pronta
+  const audio = useGeneratedAudio(validStory ? storyId : NaN, filterId)
 
   const segments = useQuery({
     queryKey: ['segments', storyId],
@@ -63,12 +64,29 @@ export function PlayerPage() {
 
   let audioError: string | null = null
   if (!validStory) audioError = 'História não encontrada.'
-  else if (audio.isError) {
-    audioError =
-      axios.isAxiosError(audio.error) && audio.error.response?.status === 404
-        ? 'O áudio desta história ainda não foi gerado.'
-        : 'Não foi possível obter o áudio agora. Tente novamente em instantes.'
+  else if (audio.error) audioError = audio.error
+  else if (audio.status?.total === 0) audioError = 'Esta história ainda não tem frases para gerar o áudio.'
+
+  const status = audio.status
+  // O player aparece assim que existe alguma frase pronta (ou já pulada): não espera a história toda
+  const showPlayer = !audioError && status !== null && (audio.src !== null || audio.currentIndex > 0 || audio.finished)
+
+  let subtitle: string | undefined
+  if (status) {
+    const sentence = audio.current ? `Frase ${audio.currentIndex + 1} de ${status.total}` : 'Fim da história'
+    subtitle = audio.generating ? `${sentence} · Gerando áudio: ${status.ready}/${status.total} frases` : sentence
   }
+
+  let waitingMessage: string | null = null
+  if (audio.waiting) {
+    waitingMessage =
+      audio.current?.status === 'ready' ? 'Carregando a próxima frase...' : 'Gerando o áudio da próxima frase...'
+  }
+
+  const notice =
+    audio.skippedCount > 0
+      ? `${audio.skippedCount} ${audio.skippedCount === 1 ? 'frase não pôde ser gerada e foi pulada' : 'frases não puderam ser geradas e foram puladas'}.`
+      : null
 
   return (
     <PageLayout>
@@ -80,8 +98,44 @@ export function PlayerPage() {
         Voltar
       </button>
 
-      {audio.data ? (
-        <AudioPlayer src={audio.data.url} title={title} chips={chips} />
+      {validStory && filterId === null ? (
+        <div className="rounded-2xl bg-bg-surface border border-border-subtle p-7 shadow-2xl shadow-black/40">
+          <p className="font-display text-2xl text-text-primary mb-4">{title}</p>
+          <p role="alert" className="text-sm text-text-muted mb-4">
+            Escolha um filtro de audição para gerar o áudio desta história.
+          </p>
+          <Link
+            to="/filter"
+            className="inline-block text-sm font-medium rounded-xl px-4 py-2 text-bg-deep"
+            style={{ backgroundColor: 'var(--color-accent-en)' }}
+          >
+            Escolher filtro
+          </Link>
+        </div>
+      ) : showPlayer ? (
+        <>
+          <AudioPlayer
+            src={audio.src}
+            title={title}
+            chips={chips}
+            autoPlay
+            onEnded={audio.next}
+            subtitle={subtitle}
+            waitingMessage={waitingMessage}
+            notice={notice}
+          />
+          {audio.finished && (
+            <div className="text-center mt-3">
+              <button
+                type="button"
+                onClick={audio.restart}
+                className="text-sm text-text-muted hover:text-text-primary transition-colors"
+              >
+                Ouvir de novo
+              </button>
+            </div>
+          )}
+        </>
       ) : (
         <div className="rounded-2xl bg-bg-surface border border-border-subtle p-7 shadow-2xl shadow-black/40">
           <p className="font-display text-2xl text-text-primary mb-4">{title}</p>
@@ -91,7 +145,7 @@ export function PlayerPage() {
             </p>
           ) : (
             <p role="status" className="text-sm text-text-muted">
-              Carregando áudio...
+              {status ? `Gerando áudio: ${status.ready}/${status.total} frases...` : 'Preparando o áudio...'}
             </p>
           )}
         </div>
@@ -101,6 +155,7 @@ export function PlayerPage() {
           segments={segments.data.segments}
           baseLanguage={rules.base_language}
           swapIds={swapIds}
+          activeSegmentId={audio.current?.segment_id ?? null}
         />
       )}
       {rules && segments.isError && (
