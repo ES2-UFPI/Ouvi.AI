@@ -258,6 +258,52 @@ fake.calls             # [FakeCall(ssml=..., voice_id="qualquer-voz")]
 Nos testes, troque o provedor com `app.dependency_overrides[get_tts_provider] = lambda: FakeTTSProvider()`.
 Um erro de síntese é um `TTSError`, com `retryable` dizendo se vale tentar de novo.
 
+## Composição do áudio (AudioComposer)
+
+O `AudioComposer` (`backend/app/modules/audio/composer/`) decide **o que muda de idioma** em cada frase e monta o texto
+com marcação SSML que vai ao TTS. Ele não usa rede, banco nem TTS: recebe frases e anotações e devolve texto, por isso é
+fácil de testar.
+
+```python
+from app.modules.audio.composer import AudioComposer
+
+composer = AudioComposer()
+# 1) escolhe os trechos trocados na HISTÓRIA INTEIRA (o que a densidade do filtro pede)
+selected = composer.select_swaps(segments, ["phrasal_verbs"], "medium")
+# 2) compõe cada frase
+composed = composer.compose(segment, selected, "pt")
+composed.ssml   # <speak version="1.0" xml:lang="pt-BR">A raposa <lang xml:lang="en-US">gave up</lang> das uvas.</speak>
+composed.text   # "A raposa desistiu das uvas."  (o texto que aparece na tela, sem marcação)
+composed.swaps  # [Swap(start=9, end=17, text="desistiu", spoken="gave up", lang="en-US", annotation_id=1)]
+```
+
+**Densidade.** É a fração dos phrasal verbs **da história inteira** (e não por frase) que muda de idioma:
+
+| Densidade | Fração trocada | Exemplo, história com 20 trechos |
+|---|---|---|
+| `low` (baixa) | 15% | 3 trechos |
+| `medium` (média) | 35% | 7 trechos |
+| `high` (alta) | 60% | 12 trechos |
+
+As frações são constantes (`DENSITY_SHARE`, em `density.py`). Só entram os trechos que **têm equivalente em português**
+(o campo `pt_*` preenchido), e só eles contam na fração.
+
+**Determinismo.** A escolha não usa sorteio: os trechos escolhidos ficam no meio de faixas iguais da história (o 1º, o 4º, o 7º...,
+espaçados de forma regular). O mesmo filtro e a mesma história geram sempre o mesmo SSML, o que o cache de áudio exige.
+
+**Direção.** Com `base_language="pt"` o português fica na tela e os trechos são falados em inglês (`en-US`). Com `"en"` é o
+inverso (os trechos são falados em `pt-BR`). O `Swap` informa as posições no texto exibido, para o front destacar o trecho.
+
+**Novos tipos de trecho.** O filtro usa `phrasal_verbs` (plural) e a anotação usa `phrasal_verb` (singular): a `SwapStrategyFactory`
+liga um ao outro. Um tipo novo entra com uma `SwapStrategy` e uma linha na fábrica.
+
+Para **ver** a composição das histórias reais (precisa do seed e da anotação), sem escrever código:
+
+```bash
+docker compose exec api python -m scripts.compose_demo --density high
+docker compose exec api python -m scripts.compose_demo --story 2 --density low --ssml
+```
+
 ## Filtro de Audição e player (front)
 
 1. Em `/filter`, escolha a história, o idioma base, o tipo de trecho e a densidade, e clique em **Salvar filtro**.
