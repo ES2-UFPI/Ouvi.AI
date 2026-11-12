@@ -306,7 +306,7 @@ def test_o_contrato_aparece_no_openapi(api):
     assert {"200", "401", "404", "422"} <= set(operacao["responses"])
 
     previa_schema = esquema["components"]["schemas"]["PreviewRead"]
-    assert set(previa_schema["properties"]) == {"story", "rules", "totals", "segments"}
+    assert set(previa_schema["properties"]) == {"story", "rules", "totals", "density_profile", "segments"}
     troca = esquema["components"]["schemas"]["SwapRead"]
     assert set(troca["properties"]) == {"start", "end", "text", "spoken", "lang", "annotation_id"}
 

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from pydantic import ValidationError
 
-from app.modules.audio.composer import AudioComposer, ComposedText
+from app.modules.audio.composer import AudioComposer, ComposedText, SentenceDensity
 from app.modules.filters.schemas import FilterRules
 from app.modules.filters.service import FilterService
 from app.modules.stories.models import Story
@@ -32,6 +32,7 @@ class StoryPreview:
     rules: FilterRules
     segments: list[SegmentPreview]
     candidates: int
+    density_profile: list[SentenceDensity]
 
     @property
     def swapped(self) -> int:
@@ -68,12 +69,19 @@ class PreviewService:
         except ValueError as exc:  # inclui UnknownSwapStrategyError (tipo de trecho sem estratégia)
             raise InvalidFilterRulesError(str(exc)) from exc
 
+        previews = [
+            SegmentPreview(s.id, s.position, self.composer.compose(s, selected, rules.base_language))
+            for s in segments
+        ]
+        # O perfil conta as trocas do SSML composto: é o mesmo número de `swaps` de cada frase
+        profile = self.composer.density_profile(
+            segments,
+            {p.id: len(p.composed.swaps) for p in previews},
+            rules.segment_types,
+            rules.density,
+            rules.word_level,
+            rules.progression,
+        )
         return StoryPreview(
-            story=story,
-            rules=rules,
-            segments=[
-                SegmentPreview(s.id, s.position, self.composer.compose(s, selected, rules.base_language))
-                for s in segments
-            ],
-            candidates=candidates,
+            story=story, rules=rules, segments=previews, candidates=candidates, density_profile=profile
         )
