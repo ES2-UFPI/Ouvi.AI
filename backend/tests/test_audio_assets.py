@@ -54,8 +54,9 @@ def criar(repo: AudioAssetRepository, historia: Story, posicao: int = 0, rules_h
     )
 
 
-def total(db_session) -> int:
-    return db_session.scalar(select(func.count()).select_from(AudioAsset))
+def total(db_session, story_id: int) -> int:
+    """Áudios DESTA história: o banco de desenvolvimento pode ter outros, de uso real."""
+    return db_session.scalar(select(func.count()).select_from(AudioAsset).where(AudioAsset.story_id == story_id))
 
 
 # ---------- hash das regras ----------
@@ -92,7 +93,7 @@ def test_pedir_de_novo_devolve_o_mesmo_registro(repo, historia, db_session):
     segundo = criar(repo, historia)
 
     assert primeiro.id == segundo.id
-    assert total(db_session) == 1
+    assert total(db_session, historia.id) == 1
 
 
 def test_pedir_de_novo_nao_desfaz_o_que_ja_esta_pronto(repo, historia):
@@ -113,7 +114,7 @@ def test_mudar_frase_regras_ou_voz_cria_outro_registro(repo, historia, db_sessio
     outro = criar(repo, historia, **diferenca)
 
     assert um.id != outro.id
-    assert total(db_session) == 2
+    assert total(db_session, historia.id) == 2
 
 
 def test_o_banco_recusa_dois_registros_para_a_mesma_frase_regras_e_voz(db_session, historia):
@@ -130,19 +131,21 @@ def test_o_banco_recusa_dois_registros_para_a_mesma_frase_regras_e_voz(db_sessio
 def test_apagar_a_historia_apaga_os_audios(repo, historia, db_session):
     criar(repo, historia, 0)
     criar(repo, historia, 1)
+    story_id = historia.id
 
     db_session.delete(historia)
     db_session.commit()
 
-    assert total(db_session) == 0
+    assert total(db_session, story_id) == 0
 
 
 def test_apagar_a_historia_direto_no_banco_tambem_apaga_os_audios(repo, historia, db_session):
     """O CASCADE é do banco, não só do ORM: vale para um DELETE feito por fora."""
     criar(repo, historia)
-    db_session.execute(text("DELETE FROM stories WHERE id = :id"), {"id": historia.id})
+    story_id = historia.id
+    db_session.execute(text("DELETE FROM stories WHERE id = :id"), {"id": story_id})
     db_session.commit()
-    assert total(db_session) == 0
+    assert total(db_session, story_id) == 0
 
 
 # ---------- transições de estado ----------
