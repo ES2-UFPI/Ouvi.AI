@@ -1,4 +1,6 @@
 """Camada Router: recebe a requisição HTTP e delega ao Service."""
+from typing import get_args
+
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
@@ -6,7 +8,14 @@ from app.core.database import get_db
 from app.modules.auth.dependencies import get_current_user
 from app.modules.filters.models import ListeningFilter
 from app.modules.filters.repository import FilterRepository
-from app.modules.filters.schemas import FilterRead, FilterWrite
+from app.modules.filters.schemas import (
+    SCENARIOS,
+    Density,
+    FilterOptions,
+    FilterRead,
+    FilterWrite,
+    WordLevel,
+)
 from app.modules.filters.service import FilterNotFoundError, FilterService
 from app.modules.users.models import User
 
@@ -39,6 +48,18 @@ def create_filter(
     service: FilterService = Depends(get_filter_service),
 ) -> ListeningFilter:
     return service.create(user, data)
+
+
+@router.get("/options", response_model=FilterOptions)
+def get_filter_options() -> FilterOptions:
+    """Combinações permitidas de idioma base, tipos de trecho e nível das palavras.
+
+    É a mesma tabela que a API usa para validar os filtros: o front monta as opções a partir daqui.
+    Qualquer combinação fora dela responde 422 no POST e no PUT.
+    """
+    return FilterOptions(
+        scenarios=list(SCENARIOS), densities=list(get_args(Density)), word_levels=list(get_args(WordLevel))
+    )
 
 
 @router.get("/{filter_id}", response_model=FilterRead)
