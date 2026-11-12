@@ -67,6 +67,15 @@ class AudioAssetRepository:
         # populate_existing: se o objeto já estava na sessão, traz o estado atual do banco
         return self.db.scalars(stmt.execution_options(populate_existing=True)).one()
 
+    def get_by_segment(self, segment_id: int, *, rules_hash: str, voice_id: str) -> AudioAsset | None:
+        """Áudio da frase para as regras e a voz, ou None se a geração ainda não chegou nela."""
+        stmt = select(AudioAsset).where(
+            AudioAsset.segment_id == segment_id,
+            AudioAsset.rules_hash == rules_hash,
+            AudioAsset.voice_id == voice_id,
+        )
+        return self.db.scalar(stmt)
+
     def list_by_story(self, story_id: int, *, rules_hash: str, voice_id: str) -> list[AudioAsset]:
         """Áudios da história para as regras e a voz, na ordem das frases."""
         stmt = (
