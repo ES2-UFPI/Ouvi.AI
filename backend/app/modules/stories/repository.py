@@ -2,7 +2,7 @@
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -53,6 +53,10 @@ class SegmentRepository:
             Segment.story_id == story_id, Segment.position == position
         )
         return self.db.scalar(stmt)
+
+    def count_by_story(self, story_id: int) -> int:
+        stmt = select(func.count()).select_from(Segment).where(Segment.story_id == story_id)
+        return self.db.scalar(stmt) or 0
 
     def list_by_story(
         self, story_id: int, kind: str | None = None, aligned_only: bool = False
