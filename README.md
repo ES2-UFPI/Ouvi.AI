@@ -253,6 +253,52 @@ Para testar com `curl`, gere uma URL em `GET /audio/url` (pelo `/docs`, depois d
 curl -s -o /dev/null -D - -H "Range: bytes=0-99" "<url>"
 ```
 
+## Fluxo completo: do cadastro ao áudio
+
+Com o projeto no ar e os passos 1 a 4 de "Rodando o projeto" feitos, dá para percorrer o pipeline inteiro só com a
+API. Sem nenhuma chave: o provedor padrão (`TTS_PROVIDER=fake`) gera tons audíveis em vez de voz.
+
+```bash
+# 1. Cadastre-se e entre (guarde o access_token)
+curl -s -X POST localhost:8000/auth/register -H "Content-Type: application/json" \
+  -d '{"name":"Ana","email":"ana@teste.com","password":"Senha1234"}'
+TOKEN=$(curl -s -X POST localhost:8000/auth/login -H "Content-Type: application/json" \
+  -d '{"email":"ana@teste.com","password":"Senha1234"}' | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+# 2. Crie um filtro para a história 1 (idioma base português, phrasal verbs, densidade alta)
+curl -s -X POST localhost:8000/filters -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"story_id":1,"rules":{"base_language":"pt","segment_types":["phrasal_verbs"],"density":"high"}}'
+
+# 3. Veja o texto com as trocas (não gera áudio) e depois gere o áudio (filter_id = id devolvido no passo 2)
+curl -s "localhost:8000/stories/1/preview?filter_id=1" -H "Authorization: Bearer $TOKEN"
+curl -s -X POST localhost:8000/stories/1/audio -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"filter_id":1}'
+
+# 4. Acompanhe o progresso até `state` ser "ready"
+curl -s "localhost:8000/stories/1/audio/status?filter_id=1" -H "Authorization: Bearer $TOKEN"
+
+# 5. Pegue a URL assinada da frase (segment_id vem do status) e baixe com Range
+curl -s "localhost:8000/audio/segments/1?filter_id=1" -H "Authorization: Bearer $TOKEN"
+```
+
+Cole a `url` devolvida no navegador para ouvir, ou use `curl -H "Range: bytes=0-43" "<url>"` para ver o `206`. No
+front, o mesmo caminho é **Ouvir** na tela do filtro. Para ver os números do cache (acertos, erros, economia), rode
+`docker compose exec api python -m app.modules.audio.cache stats`.
+
+Variáveis de ambiente do pipeline (em `backend/.env`; os padrões servem para desenvolvimento):
+
+| Variável | Padrão | Para que serve |
+|---|---|---|
+| `TTS_PROVIDER` | `fake` | `fake` (tons, sem chave) ou o fornecedor real |
+| `TTS_API_KEY`, `TTS_REGION` | vazio | credenciais do fornecedor real (não usadas pelo `fake`) |
+| `TTS_VOICE_ID` | `fake-voice` | voz usada na síntese; entra na chave do cache |
+| `TTS_COST_PER_1K_CHARS` | `0` | preço por 1.000 caracteres, só para estimar o custo evitado pelo cache |
+| `AUDIO_SIGNING_SECRET` | `change-me-audio` | segredo das URLs assinadas do áudio (troque em produção) |
+| `AUDIO_URL_TTL_SECONDS` | `3600` | validade da URL assinada |
+| `STORAGE_BACKEND` | `s3` | `s3` (MinIO ou R2) ou `memory` (testes) |
+
+Os modelos, os exemplos de resposta de cada endpoint e as decisões que mudaram em relação ao planejamento estão em
+[`docs/pipeline-audio.md`](docs/pipeline-audio.md).
+
 ## Geração do áudio (AudioGenerationFacade)
 
 A `AudioGenerationFacade` (`backend/app/modules/audio/facade.py`) gera o áudio de uma história com um filtro: para
