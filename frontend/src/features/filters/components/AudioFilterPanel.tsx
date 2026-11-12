@@ -14,12 +14,15 @@ import {
   type FilterOptions,
   type FilterPayload,
   type FilterRules,
+  type Progression,
   type SegmentType,
   type WordLevel,
 } from '../api'
 import {
   DENSITY_LABELS,
   LANGUAGE_LABELS,
+  PROGRESSION_HINTS,
+  PROGRESSION_LABELS,
   SEGMENT_HINTS,
   SEGMENT_LABELS,
   WORD_LEVEL_HINTS,
@@ -36,9 +39,11 @@ const FALLBACK_OPTIONS: FilterOptions = {
       word_levels: ['intermediate', 'advanced'],
       description: '',
     },
+    { base_language: 'pt', segment_types: ['advanced_vocabulary'], word_levels: [], description: '' },
   ],
   densities: ['low', 'medium', 'high'],
   word_levels: ['intermediate', 'advanced'],
+  progressions: ['constant', 'increasing'],
 }
 
 // Mensagens da API (422) em português; o Pydantic começa cada uma com "Value error, "
@@ -102,10 +107,22 @@ interface FormValues {
   segmentTypes: SegmentType[]
   density: Density
   wordLevel: WordLevel | null
+  progression: Progression
 }
 
 // Começa vazio de propósito: o usuário precisa escolher o idioma base e o tipo de trecho
-const EMPTY_FORM: FormValues = { baseLanguage: null, segmentTypes: [], density: 'medium', wordLevel: null }
+const EMPTY_FORM: FormValues = {
+  baseLanguage: null,
+  segmentTypes: [],
+  density: 'medium',
+  wordLevel: null,
+  progression: 'constant',
+}
+
+// Um idioma base pode ter mais de um cenário (A e C são em português): a tela oferece a união deles
+function unique<T>(items: T[]): T[] {
+  return items.filter((item, i) => items.indexOf(item) === i)
+}
 
 export function AudioFilterPanel() {
   const queryClient = useQueryClient()
@@ -118,7 +135,9 @@ export function AudioFilterPanel() {
   // A tela só oferece as combinações que a API aceita
   const options = useQuery({ queryKey: ['filter-options'], queryFn: getFilterOptions, staleTime: Infinity })
   const { scenarios, densities } = options.data ?? FALLBACK_OPTIONS
-  const languages = scenarios.map((s) => s.base_language)
+  // Uma API antiga (sem o campo) só conhece a densidade constante
+  const progressions = options.data?.progressions ?? FALLBACK_OPTIONS.progressions
+  const languages = unique(scenarios.map((s) => s.base_language))
 
   const storyId = selectedStory ?? stories.data?.[0]?.id ?? null
   // Um filtro por história: o filtro salvo da história escolhida é o que reaparece ao reabrir a tela
@@ -129,17 +148,18 @@ export function AudioFilterPanel() {
         segmentTypes: saved.rules.segment_types,
         density: saved.rules.density,
         wordLevel: saved.rules.word_level ?? null,
+        progression: saved.rules.progression ?? 'constant',
       }
     : EMPTY_FORM
-  const { baseLanguage, segmentTypes, density, wordLevel } = draft ?? savedForm
-  const scenario = scenarios.find((s) => s.base_language === baseLanguage)
-  // Só os tipos (e níveis) do cenário do idioma base escolhido
-  const allowedTypes = scenario?.segment_types ?? []
-  const wordLevels = scenario?.word_levels ?? []
+  const { baseLanguage, segmentTypes, density, wordLevel, progression } = draft ?? savedForm
+  const languageScenarios = scenarios.filter((s) => s.base_language === baseLanguage)
+  // Só os tipos (e níveis) dos cenários do idioma base escolhido
+  const allowedTypes = unique(languageScenarios.flatMap((s) => s.segment_types))
+  const wordLevels = unique(languageScenarios.flatMap((s) => s.word_levels))
   const needsLevel = wordLevels.length > 0
 
   function edit(patch: Partial<FormValues>) {
-    setDraft({ baseLanguage, segmentTypes, density, wordLevel, ...patch })
+    setDraft({ baseLanguage, segmentTypes, density, wordLevel, progression, ...patch })
   }
 
   function changeLanguage(lang: BaseLanguage) {
@@ -180,6 +200,7 @@ export function AudioFilterPanel() {
     saved.rules.base_language === baseLanguage &&
     saved.rules.density === density &&
     (saved.rules.word_level ?? null) === (needsLevel ? wordLevel : null) &&
+    (saved.rules.progression ?? 'constant') === progression &&
     saved.rules.segment_types.length === segmentTypes.length &&
     saved.rules.segment_types.every((t) => segmentTypes.includes(t))
 
@@ -189,6 +210,8 @@ export function AudioFilterPanel() {
     const rules: FilterRules = { base_language: baseLanguage, segment_types: validTypes, density }
     // O nível só vai no cenário que o usa; nos outros a API recusa o campo
     if (needsLevel && wordLevel) rules.word_level = wordLevel
+    // A constante é o padrão e não é enviada: as regras (e o cache de áudio) dos filtros antigos não mudam
+    if (progression === 'increasing') rules.progression = progression
     save.mutate({ story_id: storyId, rules })
   }
 
@@ -303,7 +326,7 @@ export function AudioFilterPanel() {
         </fieldset>
       )}
 
-      <fieldset className="mb-7">
+      <fieldset className="mb-6">
         <legend className={SECTION_TITLE}>Densidade</legend>
         <div className="grid grid-cols-3 gap-3">
           {densities.map((d) => (
@@ -320,6 +343,27 @@ export function AudioFilterPanel() {
           ))}
         </div>
       </fieldset>
+
+      {progressions.length > 1 && (
+        <fieldset className="mb-7">
+          <legend className={SECTION_TITLE}>Progressão da densidade</legend>
+          <div className="grid grid-cols-2 gap-3">
+            {progressions.map((p) => (
+              <Choice
+                key={p}
+                type="radio"
+                name="progression"
+                checked={progression === p}
+                onChange={() => edit({ progression: p })}
+                label={PROGRESSION_LABELS[p]}
+                accent="var(--color-accent-pt)"
+                center
+              />
+            ))}
+          </div>
+          <p className="text-xs text-text-muted mt-1.5">{PROGRESSION_HINTS[progression]}</p>
+        </fieldset>
+      )}
 
       {!canSave && storyId !== null && (
         <p className="text-xs text-text-muted mb-3">

@@ -53,9 +53,16 @@ const OPTIONS = {
       word_levels: ['intermediate' as const, 'advanced' as const],
       description: 'Cenário B',
     },
+    {
+      base_language: 'pt' as const,
+      segment_types: ['advanced_vocabulary' as const],
+      word_levels: [],
+      description: 'Cenário C',
+    },
   ],
   densities: ['low' as const, 'medium' as const, 'high' as const],
   word_levels: ['intermediate' as const, 'advanced' as const],
+  progressions: ['constant' as const, 'increasing' as const],
 }
 
 function axios422(msg: string) {
@@ -79,12 +86,16 @@ describe('AudioFilterPanel', () => {
     for (const label of ['Baixa', 'Média', 'Alta']) expect(screen.getByLabelText(label)).toBeInTheDocument()
   })
 
-  it('português mostra só phrasal verbs, sem o campo de nível', async () => {
+  it('português mostra phrasal verbs e vocabulário avançado (Cenários A e C), sem o campo de nível', async () => {
     const user = userEvent.setup()
     renderPanel()
     await waitFor(() => expect(filtersApi.getFilterOptions).toHaveBeenCalled())
-    await user.click(await screen.findByLabelText(/Português/))
+    // A e C são dois cenários com a mesma base: o idioma aparece uma vez só
+    expect(await screen.findAllByLabelText(/Português/)).toHaveLength(1)
+    await user.click(screen.getByLabelText(/Português/))
     expect(screen.getByLabelText('Phrasal verbs')).toBeInTheDocument()
+    expect(screen.getByLabelText('Vocabulário avançado')).toBeInTheDocument()
+    expect(screen.getByText(/as palavras raras são faladas em inglês/)).toBeInTheDocument()
     expect(screen.queryByLabelText('Palavras difíceis')).not.toBeInTheDocument()
     expect(screen.queryByText('Nível das palavras')).not.toBeInTheDocument()
   })
@@ -262,5 +273,69 @@ describe('AudioFilterPanel', () => {
     await user.click(screen.getByRole('button', { name: 'Salvar filtro' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível salvar o filtro')
+  })
+
+  it('cria o filtro do Cenário C com densidade crescente', async () => {
+    const user = userEvent.setup()
+    vi.mocked(filtersApi.createFilter).mockResolvedValue(saved())
+    renderPanel()
+    await screen.findByRole('option', { name: 'A Raposa e as Uvas' })
+
+    await user.click(screen.getByLabelText(/Português/))
+    await user.click(screen.getByLabelText('Vocabulário avançado'))
+    await user.click(screen.getByLabelText('Média'))
+    expect(screen.getByLabelText('Constante')).toBeChecked()
+    await user.click(screen.getByLabelText('Crescente'))
+    expect(screen.getByText(/Começa com poucas trocas e aumenta até o final/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Salvar filtro' }))
+
+    await waitFor(() =>
+      expect(filtersApi.createFilter).toHaveBeenCalledWith({
+        story_id: 1,
+        rules: {
+          base_language: 'pt',
+          segment_types: ['advanced_vocabulary'],
+          density: 'medium',
+          progression: 'increasing',
+        },
+      }),
+    )
+  })
+
+  it('combina phrasal verbs e vocabulário avançado e não envia a progressão constante', async () => {
+    const user = userEvent.setup()
+    vi.mocked(filtersApi.createFilter).mockResolvedValue(saved())
+    renderPanel()
+    await screen.findByRole('option', { name: 'A Raposa e as Uvas' })
+
+    await user.click(screen.getByLabelText(/Português/))
+    await user.click(screen.getByLabelText('Phrasal verbs'))
+    await user.click(screen.getByLabelText('Vocabulário avançado'))
+    await user.click(screen.getByRole('button', { name: 'Salvar filtro' }))
+
+    await waitFor(() =>
+      expect(filtersApi.createFilter).toHaveBeenCalledWith({
+        story_id: 1,
+        rules: { base_language: 'pt', segment_types: ['phrasal_verbs', 'advanced_vocabulary'], density: 'medium' },
+      }),
+    )
+  })
+
+  it('reaparece com a progressão crescente salva', async () => {
+    vi.mocked(filtersApi.listFilters).mockResolvedValue([
+      saved({
+        rules: {
+          base_language: 'pt',
+          segment_types: ['advanced_vocabulary'],
+          density: 'high',
+          progression: 'increasing',
+        },
+      }),
+    ])
+    renderPanel()
+
+    await waitFor(() => expect(screen.getByLabelText('Vocabulário avançado')).toBeChecked())
+    expect(screen.getByLabelText('Crescente')).toBeChecked()
+    expect(screen.getByRole('link', { name: 'Ouvir' })).toHaveAttribute('href', '/player/1?filter=7')
   })
 })
