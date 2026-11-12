@@ -337,6 +337,38 @@ docker compose exec api python -m scripts.compose_demo --density high
 docker compose exec api python -m scripts.compose_demo --story 2 --density low --ssml
 ```
 
+## Prévia do texto com as trocas
+
+`GET /stories/{story_id}/preview?filter_id=<id>` (exige token) mostra **o que vai mudar de idioma** sem gerar áudio: não
+gasta TTS e não grava nada no banco. O front usa esta rota para exibir o texto e destacar os trechos, em vez de calcular a
+seleção por conta própria: ela usa o mesmo `AudioComposer` da geração de áudio, então o que o usuário vê é o que ele ouve.
+
+```json
+{
+  "story": {"id": 1, "title": "A Raposa e as Uvas", "language": "en"},
+  "rules": {"base_language": "pt", "segment_types": ["phrasal_verbs"], "density": "high"},
+  "totals": {"segments": 12, "candidates": 9, "swapped": 5},
+  "segments": [
+    {"id": 7, "position": 8, "text": "Um passarinho viu a raposa desistir e voou para longe.",
+     "swaps": [{"start": 27, "end": 35, "text": "desistir", "spoken": "give up", "lang": "en-US", "annotation_id": 31}]}
+  ]
+}
+```
+
+- `text` é a frase no **idioma base do filtro**, sem marcação. Em cada troca, `text[start:end]` é o trecho que muda de idioma,
+  e `spoken` é o que será falado no lugar dele (em `lang`).
+- `totals`: `candidates` são os trechos que poderiam ser trocados (têm equivalente em português), e `swapped` é a soma dos
+  `swaps` de todas as frases.
+- O mesmo filtro devolve sempre a mesma prévia. As frases vêm em ordem de `position`.
+
+| Resposta | Quando |
+|---|---|
+| `401` | sem token |
+| `404` | história inexistente, ou filtro inexistente ou de outro usuário |
+| `422` | filtro criado para outra história, regras do filtro inválidas ou `filter_id` ausente |
+
+O contrato completo está no `/docs` (Swagger), com os schemas `PreviewRead` e `SwapRead`.
+
 ## Filtro de Audição e player (front)
 
 1. Em `/filter`, escolha a história, o idioma base, o tipo de trecho e a densidade, e clique em **Salvar filtro**.
