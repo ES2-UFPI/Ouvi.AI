@@ -1,7 +1,9 @@
 """AudioGenerationFacade: junta as etapas da geração de áudio de uma história atrás de um único `generate()`.
 
 Para cada frase, em ordem: compõe o SSML com as regras do filtro (AudioComposer), sintetiza (TTSProvider),
-grava o arquivo (ObjectStorage) e registra o resultado (AudioAssetRepository). O Router não conhece nenhuma
+grava o arquivo (ObjectStorage) e registra o resultado (AudioAssetRepository). Antes do TTS, consulta o cache
+global de áudio (AudioCache, US08): se o mesmo conteúdo já foi sintetizado, para qualquer filtro ou usuário, o
+arquivo é reaproveitado e o TTS não é chamado. O Router não conhece nenhuma
 dessas etapas. Uma falha em uma frase não derruba as outras: só aquela frase termina `failed`.
 
 A Facade só lê as frases pelo `StoryService` (nunca pelo repositório de outro módulo) e recebe a sessão do
@@ -19,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.integrations.storage import ObjectStorage, StorageError
 from app.integrations.tts import TTSError, TTSProvider
+from app.modules.audio.cache.service import AudioCache
 from app.modules.audio.composer import AudioComposer
 from app.modules.audio.models import STATUS_READY, AudioAsset
 from app.modules.audio.repository import AudioAssetRepository, InvalidTransition, compute_rules_hash
@@ -34,12 +37,9 @@ RETRY_BASE_DELAY_SECONDS = 1.0
 # Uma frase em `generating` sem mudança há mais que isto está presa (a API reiniciou no meio da geração)
 STALE_AFTER = timedelta(minutes=2)
 
-_CONTENT_TYPES = {"wav": "audio/wav", "mp3": "audio/mpeg"}
-
-
-def audio_storage_key(story_id: int, rules_hash: str, voice_id: str, segment_id: int, audio_format: str) -> str:
-    """Chave do arquivo no armazenamento. Depende das regras e da voz, como o próprio AudioAsset."""
-    return f"stories/{story_id}/audio/{rules_hash}/{voice_id}/{segment_id}.{audio_format}"
+# Usados na chave de cache quando o provedor não informa os seus (veja `provider_name` e `audio_format`)
+DEFAULT_PROVIDER = "desconhecido"
+DEFAULT_AUDIO_FORMAT = "wav"
 
 
 @dataclass
@@ -49,6 +49,8 @@ class GenerationResult:
     generated: list[int] = field(default_factory=list)  # sintetizadas agora
     skipped: list[int] = field(default_factory=list)  # já prontas, ou em geração por outro worker
     failed: list[int] = field(default_factory=list)  # falharam nesta chamada
+    cached: list[int] = field(default_factory=list)  # prontas agora, reaproveitando o cache (sem TTS)
+    chars_saved: int = 0  # caracteres que deixaram de ir ao TTS graças ao cache
 
 
 class AudioGenerationFacade:
@@ -61,6 +63,9 @@ class AudioGenerationFacade:
         *,
         voice_id: str,
         composer: AudioComposer | None = None,
+        cache: AudioCache | None = None,
+        provider: str | None = None,
+        audio_format: str | None = None,
         max_attempts: int = MAX_ATTEMPTS,
         retry_base_delay: float = RETRY_BASE_DELAY_SECONDS,
         stale_after: timedelta = STALE_AFTER,
@@ -72,6 +77,10 @@ class AudioGenerationFacade:
         self.storage = storage
         self.voice_id = voice_id
         self.composer = composer or AudioComposer()
+        self.cache = cache or AudioCache(assets.db, storage)
+        # Fornecedor e formato entram na chave de cache: trocar qualquer um gera áudio novo
+        self.provider = provider or getattr(tts, "provider_name", DEFAULT_PROVIDER)
+        self.audio_format = audio_format or getattr(tts, "audio_format", DEFAULT_AUDIO_FORMAT)
         self.max_attempts = max_attempts
         self.retry_base_delay = retry_base_delay
         self.stale_after = stale_after
@@ -101,7 +110,9 @@ class AudioGenerationFacade:
             logger.warning("%d frase(s) presa(s) em generating voltaram para a fila", recovered)
 
         # A seleção das trocas é feita sobre a HISTÓRIA INTEIRA (densidade), igual à prévia do texto
-        selected = self.composer.select_swaps(segments, rules["segment_types"], rules["density"])
+        selected = self.composer.select_swaps(
+            segments, rules["segment_types"], rules["density"], rules.get("word_level")
+        )
 
         # Cria antes todos os registros (`pending`): o status já mostra o total desde o começo
         assets = [
@@ -113,11 +124,17 @@ class AudioGenerationFacade:
 
         result = GenerationResult()
         for segment, asset in zip(segments, assets):
-            outcome = self._process(segment, asset, selected, rules["base_language"])
+            outcome = self._process(segment, asset, selected, rules["base_language"], result)
             getattr(result, outcome).append(segment.id)
+        logger.info(
+            "Cache de áudio da história %s: %d acerto(s), %d erro(s), %d caracteres economizados",
+            story_id, len(result.cached), len(result.generated), result.chars_saved,
+        )
         return result
 
-    def _process(self, segment: Segment, asset: AudioAsset, selected: set[int], base_language: str) -> str:
+    def _process(
+        self, segment: Segment, asset: AudioAsset, selected: set[int], base_language: str, result: GenerationResult
+    ) -> str:
         """Gera uma frase. Devolve o nome da lista do GenerationResult em que ela entra."""
         if asset.status == STATUS_READY:
             return "skipped"
@@ -129,19 +146,36 @@ class AudioGenerationFacade:
 
         try:
             ssml = self.composer.compose(segment, selected, base_language).ssml
-            synthesis = self._synthesize(ssml)
-            key = audio_storage_key(asset.story_id, asset.rules_hash, asset.voice_id, segment.id, synthesis.format)
-            content_type = _CONTENT_TYPES.get(synthesis.format, "application/octet-stream")
-            self.storage.put(key, synthesis.data, content_type=content_type)
+            # O cache é consultado depois de compor: a chave depende do SSML final, não do filtro
+            cached = self.cache.fetch_or_create(
+                ssml,
+                voice_id=self.voice_id,
+                provider=self.provider,
+                audio_format=self.audio_format,
+                synthesize=lambda: self._synthesize(ssml),
+            )
         except (TTSError, StorageError, ValueError) as exc:
             # ValueError: anotação desatualizada em relação ao texto (o composer recusa montar o SSML)
             logger.warning("Falha ao gerar o áudio da frase %s: %s", segment.id, exc)
             self.assets.mark_failed(asset, str(exc) or type(exc).__name__)
             return "failed"
 
+        blob = cached.blob
         self.assets.mark_ready(
-            asset, storage_key=key, audio_format=synthesis.format, duration_ms=synthesis.duration_ms
+            asset,
+            storage_key=blob.storage_key,
+            audio_format=blob.format,
+            duration_ms=blob.duration_ms,
+            blob_id=blob.id,
         )
+        if cached.hit:
+            result.chars_saved += blob.char_count
+            logger.info(
+                "Cache de áudio: acerto na frase %s (blob %s, %d caracteres economizados)",
+                segment.id, blob.id, blob.char_count,
+            )
+            return "cached"
+        logger.info("Cache de áudio: erro na frase %s (blob %s sintetizado)", segment.id, blob.id)
         return "generated"
 
     def _synthesize(self, ssml: str):

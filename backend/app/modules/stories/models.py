@@ -19,6 +19,8 @@ from app.core.database import Base
 
 # Tipos de anotação. É texto (e não enum do banco) para novos tipos entrarem sem migração.
 KIND_PHRASAL_VERB = "phrasal_verb"
+# Palavra de baixa frequência no inglês, trocada pelo português no Cenário B (US10)
+KIND_DIFFICULT_WORD = "difficult_word"
 
 
 class Story(Base):

@@ -42,8 +42,16 @@ def _escape(text: str) -> str:
 
 
 class AudioComposer:
-    def select_swaps(self, segments: "Iterable[Segment]", segment_types: Sequence[str], density: str) -> set[int]:
+    def select_swaps(
+        self,
+        segments: "Iterable[Segment]",
+        segment_types: Sequence[str],
+        density: str,
+        word_level: str | None = None,
+    ) -> set[int]:
         """Ids das anotações que serão trocadas, calculados sobre a HISTÓRIA INTEIRA.
+
+        `word_level` é o nível das palavras difíceis (filtro do Cenário B); os outros tipos o ignoram.
 
         A prévia e a geração de áudio devem usar esta mesma função: assim o que o usuário vê é o que ele ouve.
         """
@@ -55,7 +63,7 @@ class AudioComposer:
         ]
         selected: set[int] = set()
         for segment_type in segment_types:
-            selected |= SwapStrategyFactory.create(segment_type).select(ordered, density)
+            selected |= SwapStrategyFactory.create(segment_type, word_level).select(ordered, density)
         return selected
 
     def compose(self, segment: "Segment", selected: Collection[int], base_language: str) -> ComposedText:

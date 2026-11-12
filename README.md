@@ -153,6 +153,31 @@ Cada entrada liga um phrasal verb às formas dele em português:
 - Trecho sem entrada no dicionário não se perde: fica gravado com os campos `pt_*` nulos e aparece no relatório do
   comando de anotação. Acrescente as formas e rode o comando de novo.
 
+## Palavras difíceis e Cenário B (US10)
+
+No Cenário B o idioma base é o inglês e as **palavras difíceis** são faladas em português pela mesma voz.
+
+- **Detector** (`nlp/difficult_words.py`, tipo `difficult_word` na `DetectorFactory`): substantivos, verbos,
+  adjetivos e advérbios cuja frequência no inglês (escala Zipf, a maior entre a forma e o lema) é menor que 4,0.
+  Nomes próprios, números e palavras vazias nunca entram. Nível `advanced` se Zipf < 3,4, senão `intermediate`.
+  Listas de exceção: `nlp/data/difficult_words_exclude.txt` (nunca entram) e `difficult_words_include.txt` (sempre).
+- **Frequências** (`nlp/data/en_word_frequency.txt`, ~400 KB, 28 mil palavras com Zipf ≥ 3; ausentes = raras):
+  geradas uma vez da biblioteca [wordfreq](https://github.com/rspeer/wordfreq) por
+  `python -m scripts.build_word_frequency`. A wordfreq **não** entra no `requirements.txt` (o pacote tem ~56 MB);
+  a imagem cresce só ~0,4 MB. Dados sob CC BY-SA 4.0 (Robyn Speer / Luminoso).
+- **Dicionário** (`nlp/data/pt_words.json`): lema de uma palavra → formas em português, mesmo formato de
+  `pt_equivalents.json`. As chaves não podem colidir com as dos phrasal verbs.
+- **Candidatos por história** (para revisar o dicionário): `python -m app.modules.stories.candidates [--level advanced]`.
+- **Anotação por tipo**: `python -m app.modules.stories.annotate --kind difficult_word` refaz só as palavras difíceis,
+  sem tocar nos phrasal verbs (e vice-versa). Sem `--kind`, todos os tipos. Na sobreposição o phrasal verb vence
+  (*dozed off* não gera a palavra *dozed*), e o relatório mostra, por tipo, detectados, alinhados, sem equivalente e
+  descartados.
+- **Filtro**: `{"base_language": "en", "segment_types": ["difficult_words"], "word_level": "intermediate", "density": "medium"}`.
+  As combinações permitidas estão em `SCENARIOS` (`modules/filters/schemas.py`) e em `GET /filters/options`.
+  `intermediate` troca as palavras dos dois níveis; `advanced`, só as raras.
+- Hoje o seed tem 40 candidatas, todas com equivalente (Lebre: 17, Patinho: 14, Raposa: 9); 2 são descartadas na
+  anotação por estarem dentro de phrasal verbs, ficando 38. A Raposa é curta demais para a meta de 15 por história.
+
 ## Trechos candidatos pela API
 
 `GET /stories/{id}/segments` (exige token) devolve as frases da história em ordem de `position`, cada uma com suas anotações em ordem de `en_start`.
@@ -255,6 +280,54 @@ Resposta do `POST` e do `status`:
 `state` é `pending` (nada em andamento), `generating`, `ready` (todas prontas) ou `failed` (terminou com alguma frase
 em falha; um novo `POST` tenta de novo só as que falharam). `status` de cada frase: `pending`, `generating`, `ready`
 ou `failed`.
+
+## Cache de áudio (US08)
+
+O TTS cobra por caractere, então o mesmo conteúdo é sintetizado **uma única vez**, para qualquer filtro e
+qualquer usuário. A identidade de um arquivo é a **chave de cache** (`backend/app/modules/audio/cache/key.py`):
+
+```python
+build_cache_key(ssml, voice_id, provider, audio_format)  # SHA-256 em hexadecimal (64 caracteres)
+```
+
+- Entram o SSML **normalizado** (espaços repetidos fora das tags viram um só; os das pontas saem), a voz, o
+  fornecedor do TTS, o formato do áudio e a `CACHE_KEY_VERSION`. O idioma está no próprio SSML (`xml:lang`).
+- Não entram usuário, filtro nem história: uma frase sem troca de idioma tem o mesmo SSML em qualquer filtro.
+- Mudar o texto, as trocas, o idioma, a voz, o fornecedor ou o formato gera outra chave, e portanto outro áudio.
+- Mudou a forma de calcular a chave? Suba a `CACHE_KEY_VERSION`: as chaves antigas deixam de bater.
+
+Cada arquivo do cache é um registro `AudioBlob` (tabela `audio_blobs`: chave única, chave do arquivo no
+armazenamento, formato, duração, tamanho, caracteres, acertos, erros, criação e último uso). O `AudioAsset` de
+cada frase aponta para o blob pela coluna `blob_id`.
+
+Na geração (`AudioGenerationFacade`), depois de compor o SSML de cada frase, o `AudioCache` calcula a chave e:
+
+- **acerto**: o blob existe e o arquivo está no armazenamento. O `AudioAsset` aponta para ele e fica `ready`, sem
+  chamar o TTS (o blob soma um acerto e atualiza o último uso);
+- **erro**: sintetiza, grava em `cache/<2 primeiros>/<chave>.<formato>` e só depois registra o blob. Uma falha no
+  meio deixa no máximo um arquivo órfão, nunca um registro apontando para um arquivo inexistente;
+- **arquivo sumido**: o blob existe mas o arquivo não; a frase é sintetizada de novo e o registro é corrigido.
+
+Dois pedidos simultâneos da mesma frase nova fazem uma única chamada ao TTS: um lock consultivo do Postgres
+(`pg_advisory_xact_lock`) por chave faz o segundo esperar o primeiro e encontrar o blob pronto. O log mostra os
+acertos e erros de cada frase e, no fim, o total de caracteres economizados.
+
+Comandos (rode dentro de `backend/`):
+
+```bash
+# Estatísticas: arquivos, tamanho, acertos, erros, taxa de acerto, caracteres economizados e custo evitado
+python -m app.modules.audio.cache stats          # --json para a mesma informação em JSON
+# Limpeza: sem opções não apaga nada; --dry-run só mostra o relatório
+python -m app.modules.audio.cache purge --older-than 30 --dry-run   # sem uso há mais de 30 dias
+python -m app.modules.audio.cache purge --max-size 500MB            # os menos usados até caber em 500 MB
+```
+
+- O custo evitado usa `TTS_COST_PER_1K_CHARS` (preço do fornecedor por 1.000 caracteres; padrão `0`, e então o
+  custo aparece zerado). O `stats` só lê o banco. Os contadores são do cache atual: um blob apagado pela limpeza
+  leva os seus junto.
+- A limpeza devolve para `pending` os áudios de frase que usavam o blob (gerar de novo recria o áudio), apaga o
+  registro e só depois apaga o arquivo. Se apagar o arquivo falhar, sobra um arquivo órfão, nunca um registro
+  apontando para um arquivo inexistente.
 
 ## Provedor de TTS (síntese de voz)
 
