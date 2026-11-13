@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { BilingualText } from './BilingualText'
 import type { StorySegment } from '../../stories/api'
 
@@ -20,6 +20,20 @@ const segments: StorySegment[] = [
 ]
 
 describe('BilingualText', () => {
+  it('sem onSelectSegment, as frases não têm botão', () => {
+    render(<BilingualText segments={segments} baseLanguage="pt" swapIds={new Set([10])} />)
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('com onSelectSegment, cada frase tem um botão que leva o áudio até ela', () => {
+    const onSelectSegment = vi.fn()
+    render(<BilingualText segments={segments} baseLanguage="pt" swapIds={new Set([10])} onSelectSegment={onSelectSegment} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ouvir a partir da frase 1' }))
+
+    expect(onSelectSegment).toHaveBeenCalledWith(1)
+  })
+
   it('destaca em inglês o trecho trocado quando a base é português', () => {
     render(<BilingualText segments={segments} baseLanguage="pt" swapIds={new Set([10])} />)
     const destaque = screen.getByText('put on')

@@ -7,6 +7,7 @@ import {
   type AudioGenerationStatus,
   type SegmentAudioStatus,
 } from '../api'
+import { useFullAudio } from './useFullAudio'
 
 export const POLL_MS = 1500
 // Falhas seguidas no polling antes de desistir (uma falha isolada de rede não derruba o player)
@@ -33,6 +34,10 @@ function requestError(error: unknown) {
  * `startPosition` é a `position` da frase por onde começar (retomar de onde parou); sem ela, começa da primeira.
  * `hold` segura a reprodução (não busca nenhuma URL) enquanto o usuário escolhe continuar ou recomeçar: a
  * geração segue em andamento, só o áudio espera.
+ *
+ * Quando a geração termina, busca também o áudio único da história (`track`, todas as frases num arquivo só).
+ * Enquanto ele não chega (`fullPending`) as URLs por frase não são buscadas, para não tocar duas vezes; se ele
+ * não puder ser obtido, o player segue frase a frase.
  */
 export function useGeneratedAudio(
   storyId: number,
@@ -50,6 +55,13 @@ export function useGeneratedAudio(
   const requested = useRef(new Set<number>())
 
   const enabled = filterId !== null && Number.isInteger(storyId) && storyId > 0
+  // A geração terminou (prontas ou falhas): já dá para juntar tudo num áudio só
+  const generationDone = status !== null && status.total > 0 && status.state !== 'pending' && status.state !== 'generating'
+  const fullAudio = useFullAudio(storyId, filterId, enabled && generationDone)
+  // Já buscou a URL de alguma frase: o player está no modo por frase e a próxima precisa continuar vindo
+  const [sentencesStarted, setSentencesStarted] = useState(false)
+  // Com o áudio único a caminho (ou já aqui, antes de qualquer frase tocar), as frases não são buscadas
+  const holdUrls = hold || fullAudio.pending || (fullAudio.track !== null && !sentencesStarted)
 
   // Dispara a geração e faz o polling do status até terminar (limpa o timer ao desmontar)
   useEffect(() => {
@@ -119,15 +131,16 @@ export function useGeneratedAudio(
   const nextReadyId = nextReady?.segment_id ?? null
 
   useEffect(() => {
-    if (filterId === null || hold) return
+    if (filterId === null || holdUrls) return
     for (const segmentId of [currentReadyId, nextReadyId]) {
       if (segmentId === null || requested.current.has(segmentId)) continue
       requested.current.add(segmentId)
+      setSentencesStarted(true)
       getSegmentAudio(segmentId, filterId)
         .then((audio) => setUrls((prev) => ({ ...prev, [segmentId]: audio.url })))
         .catch(() => setBroken((prev) => new Set(prev).add(segmentId)))
     }
-  }, [currentReadyId, nextReadyId, filterId, hold])
+  }, [currentReadyId, nextReadyId, filterId, holdUrls])
 
   const src = current ? (urls[current.segment_id] ?? null) : null
   const finished = segments.length > 0 && current === null
@@ -161,5 +174,8 @@ export function useGeneratedAudio(
     next,
     restart,
     goTo,
+    // Áudio único da história (null enquanto não chega, ou se não puder ser obtido)
+    track: fullAudio.track,
+    fullPending: fullAudio.pending,
   }
 }

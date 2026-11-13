@@ -23,6 +23,8 @@ interface AudioPlayerProps {
   onTick?: (seconds: number) => void
   // Ponto (em segundos) onde a faixa começa, ao retomar de onde parou; vale para a faixa atual
   startAt?: number
+  // Pede para pular para um ponto da faixa (e, se `play`, tocar). Cada pedido é um objeto novo
+  seekRequest?: { time: number; play?: boolean } | null
 }
 
 const formatSpeed = (value: number) => `${String(value).replace('.', ',')}x`
@@ -39,6 +41,7 @@ export function AudioPlayer({
   onPlayingChange,
   onTick,
   startAt,
+  seekRequest,
 }: AudioPlayerProps) {
   const {
     audioRef,
@@ -72,6 +75,14 @@ export function AudioPlayer({
     else audio.addEventListener('loadedmetadata', apply, { once: true })
     return () => audio.removeEventListener('loadedmetadata', apply)
   }, [audioRef, src, startAt])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio || !seekRequest) return
+    audio.currentTime = seekRequest.time
+    // play() devolve uma promessa nos navegadores atuais; o Promise.resolve cobre os que não devolvem
+    if (seekRequest.play) void Promise.resolve(audio.play()).catch(() => undefined)
+  }, [audioRef, seekRequest])
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
 

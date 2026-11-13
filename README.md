@@ -313,6 +313,7 @@ Todas as rotas exigem token; filtro inexistente ou de outro usuário responde `4
 | `POST /stories/{story_id}/audio` com `{"filter_id": 3}` | dispara a geração em segundo plano e responde `202` com o status. Durante a geração não dispara outra (`202`); com tudo pronto responde `200` |
 | `GET /stories/{story_id}/audio/status?filter_id=3` | progresso, para o front consultar por polling |
 | `GET /audio/segments/{segment_id}?filter_id=3` | URL assinada do áudio da frase; `409` se ainda não está pronto ou se falhou |
+| `GET /stories/{story_id}/audio/full?filter_id=3` | **áudio único** da história: URL assinada de um arquivo só com todas as frases, a duração total e onde cada frase começa (`start_ms`); `409` se alguma frase ainda não terminou. As frases que falharam ficam de fora (`skipped`) |
 
 Resposta do `POST` e do `status`:
 
@@ -543,8 +544,12 @@ O caminho do usuário é **login → tela inicial → filtro → player**:
    O botão fica desativado até haver idioma base e pelo menos um tipo de trecho. O filtro é gravado em `/filters`,
    vinculado ao seu usuário, e reaparece preenchido ao reabrir a tela (um filtro por história). **Início** volta à tela inicial.
 3. **Player (`/player/<história>?filter=<id>`)**: com o filtro salvo, **Ouvir** gera o áudio (em segundo plano, frase a
-   frase) e começa a tocar assim que a primeira frase fica pronta. Há play/pausa, voltar e avançar 15 s, velocidades
-   de 0,75x a 2x (sem mudar o tom da voz), a frase tocando destacada no texto e os trechos trocados marcados.
+   frase). Enquanto gera, começa a tocar assim que a primeira frase fica pronta; quando a geração termina, a
+   história passa a tocar num **áudio único e contínuo**, com uma barra de progresso para a história toda: dá para
+   voltar até qualquer palavra arrastando a barra, com o −15 s ou pelo botão ▶ ao lado de cada frase no texto (ou
+   pelas colunas da faixa de densidade). Há ainda play/pausa, velocidades de 0,75x a 2x (sem mudar o tom da voz), a
+   frase tocando destacada no texto e os trechos trocados marcados. Se o áudio único não puder ser montado, o
+   player segue frase a frase.
 
 **Retomar de onde parou.** O player guarda a posição sozinho, sem o usuário perceber: a cada 5 s enquanto toca, ao
 pausar e ao fechar ou esconder a página (`PUT /stories/{id}/progress`); uma falha de rede é ignorada e a posição vai no
