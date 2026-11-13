@@ -147,6 +147,6 @@ Player          API (router)       Facade (segundo plano)        TTS / Storage
 
 ## Prova de conceito do TTS real (#81)
 
-Pendente: depende da chave da Azure e do PR do adaptador (#128). Quando for feita, registre aqui: voz escolhida,
-latência por frase, custo por 1.000 caracteres (alimenta `TTS_COST_PER_1K_CHARS`) e qualidade da troca de idioma
-por SSML (`<lang xml:lang="en-US">`).
+Feita em 12/11/2026 com o `AzureTTSAdapter` (região `brazilsouth`, três vozes multilíngues). O relatório completo, com a
+latência por frase, o custo por 1.000 caracteres (US$ 0,015 no plano pago, zero no F0) e a nota de naturalidade, está em
+[`poc-tts.md`](poc-tts.md). Voz padrão: `pt-BR-ThalitaMultilingualNeural`; trocar é só mudar `TTS_VOICE_ID`.
