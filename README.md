@@ -175,8 +175,14 @@ No Cenário B o idioma base é o inglês e as **palavras difíceis** são falada
 - **Filtro**: `{"base_language": "en", "segment_types": ["difficult_words"], "word_level": "intermediate", "density": "medium"}`.
   As combinações permitidas estão em `SCENARIOS` (`modules/filters/schemas.py`) e em `GET /filters/options`.
   `intermediate` troca as palavras dos dois níveis; `advanced`, só as raras.
-- Hoje o seed tem 40 candidatas, todas com equivalente (Lebre: 17, Patinho: 14, Raposa: 9); 2 são descartadas na
-  anotação por estarem dentro de phrasal verbs, ficando 38. A Raposa é curta demais para a meta de 15 por história.
+- Hoje o seed tem 80 candidatas, todas com equivalente (Lebre: 27, Patinho: 27, Raposa: 26), das quais 55 são de
+  nível avançado, o que alimenta o Cenário C (Lebre: 18, Patinho: 20, Raposa: 17). Algumas são descartadas na anotação
+  por estarem dentro de phrasal verbs. O vocabulário avançado foi enriquecido de propósito (antes a Raposa tinha 0 palavras
+  avançadas e as outras repetiam a mesma, *tortoise* e *duckling*): para trocar o texto de uma história, edite o JSON
+  do seed, acrescente as formas em português em `nlp/data/pt_words.json`, rode `candidates --level advanced` para
+  conferir e depois `seed` e `annotate`.
+  **Atenção:** áudios já gerados de uma frase cujo texto mudou continuam `ready` com o áudio antigo; apague os
+  `audio_assets` da história (ou recomece com `docker compose down -v`) para gerar de novo.
 
 ## Trechos candidatos pela API
 
