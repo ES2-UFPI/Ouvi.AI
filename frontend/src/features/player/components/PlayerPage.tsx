@@ -3,13 +3,20 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { getFilter } from '../../filters/api'
-import { DENSITY_LABELS, LANGUAGE_LABELS, SEGMENT_LABELS, WORD_LEVEL_LABELS } from '../../filters/labels'
+import {
+  DENSITY_LABELS,
+  LANGUAGE_LABELS,
+  PROGRESSION_LABELS,
+  SEGMENT_LABELS,
+  WORD_LEVEL_LABELS,
+} from '../../filters/labels'
 import { PageLayout } from '../../../shared/components/PageLayout'
-import { getStorySegments, listStories } from '../../stories/api'
+import { getStoryPreview, getStorySegments, listStories } from '../../stories/api'
 import { useGeneratedAudio } from '../hooks/useGeneratedAudio'
 import { AudioPlayer } from './AudioPlayer'
 import { selectSwapIds } from '../swaps'
 import { BilingualText } from './BilingualText'
+import { DensityStrip } from './DensityStrip'
 
 export function PlayerPage() {
   const { storyId } = useParams<{ storyId: string }>()
@@ -52,6 +59,14 @@ function PlayerPageContent() {
     () => (rules && segments.data ? selectSwapIds(segments.data.segments, rules) : new Set<number>()),
     [rules, segments.data],
   )
+  // Faixa de densidade: só na densidade crescente (Cenário C), com o perfil por frase calculado pela prévia
+  const increasing = rules?.progression === 'increasing'
+  const preview = useQuery({
+    queryKey: ['preview', storyId, filterId],
+    queryFn: () => getStoryPreview(storyId, filterId as number),
+    enabled: increasing && validStory && filterId !== null,
+    retry: false,
+  })
 
   // Resumo do filtro escolhido, mostrado como etiquetas no topo do player
   const chips = rules
@@ -59,7 +74,8 @@ function PlayerPageContent() {
       `Base: ${LANGUAGE_LABELS[rules.base_language]}`,
       ...rules.segment_types.map((t) => SEGMENT_LABELS[t]),
       ...(rules.word_level ? [`Nível ${WORD_LEVEL_LABELS[rules.word_level].toLowerCase()}`] : []),
-      `Densidade ${DENSITY_LABELS[rules.density].toLowerCase()}`,
+      `Densidade ${increasing ? 'final ' : ''}${DENSITY_LABELS[rules.density].toLowerCase()}`,
+      ...(increasing ? [`Progressão ${PROGRESSION_LABELS.increasing.toLowerCase()}`] : []),
     ]
     : []
 
@@ -125,6 +141,13 @@ function PlayerPageContent() {
             waitingMessage={waitingMessage}
             notice={notice}
           />
+          {increasing && preview.data && (
+            <DensityStrip
+              profile={preview.data.density_profile}
+              currentSegmentId={audio.current?.segment_id ?? null}
+              onSelect={audio.goTo}
+            />
+          )}
           {audio.finished && (
             <div className="text-center mt-3">
               <button

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.modules.audio.preview_schemas import (
+    DensityPointRead,
     PreviewRead,
     PreviewSegmentRead,
     PreviewStory,
@@ -40,6 +41,7 @@ def _to_read(preview: StoryPreview) -> PreviewRead:
         totals=PreviewTotals(
             segments=len(preview.segments), candidates=preview.candidates, swapped=preview.swapped
         ),
+        density_profile=[DensityPointRead.model_validate(point) for point in preview.density_profile],
         segments=[
             PreviewSegmentRead(
                 id=s.id,

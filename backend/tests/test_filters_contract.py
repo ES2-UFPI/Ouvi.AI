@@ -21,7 +21,7 @@ def corpo(**regras):
 
 # ---------- combinações válidas: todas as da tabela ----------
 
-@pytest.mark.parametrize("cenario", SCENARIOS, ids=lambda s: s.base_language)
+@pytest.mark.parametrize("cenario", SCENARIOS, ids=lambda s: s.segment_types[0])
 def test_toda_combinacao_da_tabela_e_aceita(cenario):
     niveis = cenario.word_levels or [None]
     for tipo in cenario.segment_types:
@@ -29,7 +29,10 @@ def test_toda_combinacao_da_tabela_e_aceita(cenario):
             regras = {"base_language": cenario.base_language, "segment_types": [tipo], "density": "high"}
             if nivel:
                 regras["word_level"] = nivel
-            assert FilterRules.model_validate(regras).model_dump() == regras
+            for progressao in cenario.progressions:
+                if progressao != "fixed":  # a fixa é a padrão e não aparece nas regras
+                    regras["progression"] = progressao
+                assert FilterRules.model_validate(regras).model_dump() == regras
 
 
 @pytest.mark.parametrize("nivel", ["intermediate", "advanced"])
@@ -62,7 +65,6 @@ def test_hash_do_cenario_a_nao_muda_com_o_novo_campo():
         ({**CENARIO_A, "base_language": "en"}, "combinação não disponível"),  # en + phrasal_verbs
         ({**CENARIO_B, "base_language": "pt"}, "combinação não disponível"),  # pt + difficult_words
         ({**CENARIO_A, "segment_types": ["phrasal_verbs", "difficult_words"]}, "combinação não disponível"),
-        ({**CENARIO_A, "segment_types": ["advanced_vocabulary"]}, "combinação não disponível"),  # US11, ainda não
         ({**CENARIO_B, "segment_types": ["advanced_vocabulary"]}, "combinação não disponível"),
         ({k: v for k, v in CENARIO_B.items() if k != "word_level"}, "word_level é obrigatório"),
         ({**CENARIO_A, "word_level": "advanced"}, "word_level não se aplica"),
@@ -113,8 +115,10 @@ def test_options_devolve_a_tabela_de_cenarios(api, make_user):
     resposta = api.get("/filters/options", headers=headers)
     assert resposta.status_code == 200
     opcoes = resposta.json()
+    cenarios = {(c["base_language"], tuple(c["segment_types"])): c for c in opcoes["scenarios"]}
+    assert cenarios[("pt", ("phrasal_verbs",))]["word_levels"] == []
+    assert cenarios[("pt", ("advanced_vocabulary",))]["word_levels"] == []  # Cenário C (US11)
     cenarios = {c["base_language"]: c for c in opcoes["scenarios"]}
-    assert cenarios["pt"]["segment_types"] == ["phrasal_verbs"] and cenarios["pt"]["word_levels"] == []
     assert cenarios["en"]["segment_types"] == ["difficult_words"]
     assert cenarios["en"]["word_levels"] == ["intermediate", "advanced"]
     assert opcoes["densities"] == ["low", "medium", "high"]
@@ -127,3 +131,77 @@ def test_options_exige_token(api):
 
 def test_options_aparece_no_openapi(api):
     assert "/filters/options" in api.get("/openapi.json").json()["paths"]
+
+
+# ---------- Cenário C (US11): vocabulário avançado com base português e densidade crescente ----------
+
+CENARIO_C = {
+    "base_language": "pt",
+    "segment_types": ["advanced_vocabulary"],
+    "density": "medium",
+    "progression": "increasing",
+}
+
+
+def test_cenario_c_e_aceito_pela_api_e_reaparece_igual(api, make_user):
+    _, headers = make_user()
+    criado = api.post("/filters", json=corpo(**CENARIO_C), headers=headers)
+    assert criado.status_code == 201, criado.text
+    assert criado.json()["rules"] == CENARIO_C
+    assert api.get(f"/filters/{criado.json()['id']}", headers=headers).json()["rules"] == CENARIO_C
+
+
+@pytest.mark.parametrize(
+    "regras, trecho_da_mensagem",
+    [
+        # o Cenário C EXIGE a progressão crescente
+        ({k: v for k, v in CENARIO_C.items() if k != "progression"}, "progression é obrigatória com advanced_vocabulary: use 'increasing'"),
+        ({**CENARIO_C, "progression": "fixed"}, "progression 'fixed' não se aplica a advanced_vocabulary: use 'increasing'"),
+        # e os Cenários A e B continuam com densidade fixa
+        ({**CENARIO_A, "progression": "increasing"}, "progression 'increasing' não se aplica a phrasal_verbs: use 'fixed'"),
+        ({**CENARIO_B, "progression": "increasing"}, "progression 'increasing' não se aplica a difficult_words"),
+        ({**CENARIO_C, "progression": "decreasing"}, "progression"),
+        ({**CENARIO_C, "word_level": "advanced"}, "word_level não se aplica"),
+        ({**CENARIO_C, "segment_types": ["advanced_vocabulary", "difficult_words"]}, "combinação não disponível"),
+        # A e C têm a mesma base, mas são cenários diferentes: não se misturam no mesmo filtro
+        ({**CENARIO_C, "segment_types": ["phrasal_verbs", "advanced_vocabulary"]}, "cenários diferentes"),
+    ],
+)
+def test_progressao_e_combinacoes_do_cenario_c_respondem_422(api, make_user, regras, trecho_da_mensagem):
+    _, headers = make_user()
+    resposta = api.post("/filters", json=corpo(**regras), headers=headers)
+    assert resposta.status_code == 422
+    assert trecho_da_mensagem in resposta.text
+
+
+@pytest.mark.parametrize("cenario", [CENARIO_A, CENARIO_B])
+def test_filtros_antigos_sem_progressao_continuam_validos_e_com_o_mesmo_hash(cenario):
+    # a fixa é a padrão: explícita ou ausente, as regras (e o hash do cache de áudio) são as de antes do campo
+    explicita = FilterRules.model_validate({**cenario, "progression": "fixed"}).model_dump()
+    assert explicita == FilterRules.model_validate(cenario).model_dump() == cenario
+    assert compute_rules_hash(explicita) == compute_rules_hash(cenario)
+
+
+def test_mudar_a_progressao_ou_a_densidade_muda_o_hash():
+    hashes = {
+        compute_rules_hash(FilterRules.model_validate(regras).model_dump())
+        for regras in (
+            CENARIO_C,
+            {**CENARIO_C, "density": "high"},
+            {**CENARIO_C, "segment_types": ["phrasal_verbs"], "progression": "fixed"},
+        )
+    }
+    assert len(hashes) == 3
+
+
+def test_options_lista_as_progressoes_e_a_de_cada_cenario(api, make_user):
+    _, headers = make_user()
+    opcoes = api.get("/filters/options", headers=headers).json()
+    assert opcoes["progressions"] == ["fixed", "increasing"]
+    por_tipo = {c["segment_types"][0]: c["progressions"] for c in opcoes["scenarios"]}
+    assert por_tipo == {"phrasal_verbs": ["fixed"], "difficult_words": ["fixed"], "advanced_vocabulary": ["increasing"]}
+
+
+def test_mensagem_lista_os_tipos_dos_dois_cenarios_em_portugues():
+    with pytest.raises(ValidationError, match="os tipos aceitos são: phrasal_verbs, advanced_vocabulary"):
+        FilterRules.model_validate({**CENARIO_C, "segment_types": ["difficult_words"]})

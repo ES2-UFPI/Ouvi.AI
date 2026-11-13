@@ -14,6 +14,7 @@ from app.modules.filters.schemas import (
     FilterOptions,
     FilterRead,
     FilterWrite,
+    Progression,
     WordLevel,
 )
 from app.modules.filters.service import FilterNotFoundError, FilterService
@@ -52,13 +53,16 @@ def create_filter(
 
 @router.get("/options", response_model=FilterOptions)
 def get_filter_options() -> FilterOptions:
-    """Combinações permitidas de idioma base, tipos de trecho e nível das palavras.
+    """Combinações permitidas de idioma base, tipos de trecho e nível das palavras, e as progressões da densidade.
 
     É a mesma tabela que a API usa para validar os filtros: o front monta as opções a partir daqui.
     Qualquer combinação fora dela responde 422 no POST e no PUT.
     """
     return FilterOptions(
-        scenarios=list(SCENARIOS), densities=list(get_args(Density)), word_levels=list(get_args(WordLevel))
+        scenarios=list(SCENARIOS),
+        densities=list(get_args(Density)),
+        word_levels=list(get_args(WordLevel)),
+        progressions=list(get_args(Progression)),
     )
 
 

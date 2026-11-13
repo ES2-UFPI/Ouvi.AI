@@ -38,8 +38,24 @@ class PreviewTotals(BaseModel):
     swapped: int = Field(description="Trechos de fato trocados: a soma de `swaps` de todas as frases")
 
 
+class DensityPointRead(BaseModel):
+    """Densidade de uma frase da história (US11). Com a progressão crescente, `target` sobe ao longo da
+    história; com a fixa, é a mesma em todas as frases."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    segment_id: int
+    position: int
+    candidates: int = Field(description="Trechos da frase que podem ser trocados")
+    swapped: int = Field(description="Trechos trocados na frase: o mesmo que len(swaps) dela")
+    target: float = Field(description="Fração-alvo de trocas nesta altura da história, de 0 a 1 (a curva)")
+
+
 class PreviewRead(BaseModel):
     story: PreviewStory
     rules: FilterRules
     totals: PreviewTotals
+    density_profile: list[DensityPointRead] = Field(
+        description="Perfil de densidade por frase, em ordem de posição (o player desenha a faixa com ele)"
+    )
     segments: list[PreviewSegmentRead]

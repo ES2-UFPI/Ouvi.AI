@@ -228,7 +228,7 @@ def test_tipo_de_trecho_sem_estrategia_de_troca_responde_422(api, cenario, monke
     """O filtro passa a aceitar um tipo novo antes de existir a estratégia dele: erro claro, e não 500."""
     from app.modules.audio.composer import AudioComposer, UnknownSwapStrategyError
 
-    def sem_estrategia(self, segments, segment_types, density, word_level=None):
+    def sem_estrategia(self, segments, segment_types, density, word_level=None, progression=None):
         raise UnknownSwapStrategyError("Tipo de trecho sem estratégia de troca: 'difficult_words'")
 
     monkeypatch.setattr(AudioComposer, "select_swaps", sem_estrategia)
@@ -306,7 +306,7 @@ def test_o_contrato_aparece_no_openapi(api):
     assert {"200", "401", "404", "422"} <= set(operacao["responses"])
 
     previa_schema = esquema["components"]["schemas"]["PreviewRead"]
-    assert set(previa_schema["properties"]) == {"story", "rules", "totals", "segments"}
+    assert set(previa_schema["properties"]) == {"story", "rules", "totals", "density_profile", "segments"}
     troca = esquema["components"]["schemas"]["SwapRead"]
     assert set(troca["properties"]) == {"start", "end", "text", "spoken", "lang", "annotation_id"}
 

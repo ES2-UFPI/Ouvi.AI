@@ -55,12 +55,35 @@ O texto com as trocas já calculadas, sem gerar áudio.
   "story": {"id": 1, "title": "A raposa e as uvas", "language": "en"},
   "rules": {"base_language": "pt", "segment_types": ["phrasal_verbs"], "density": "high"},
   "totals": {"segments": 12, "candidates": 9, "swapped": 5},
+  "density_profile": [
+    {"segment_id": 7, "position": 0, "candidates": 1, "swapped": 1, "target": 0.6}
+  ],
   "segments": [
     {"id": 7, "position": 0, "text": "Ela desistiu da corrida.",
      "swaps": [{"start": 4, "end": 12, "text": "desistiu", "spoken": "gave up", "lang": "en-US", "annotation_id": 21}]}
   ]
 }
 ```
+
+`density_profile` traz, para cada frase (em ordem), os candidatos, as trocas feitas (o mesmo que `len(swaps)`) e
+a fração-alvo `target` (0 a 1). Na densidade fixa (Cenários A e B), `target` é igual em todas as frases; no Cenário C
+ele segue a curva crescente (veja abaixo). O player desenha a faixa de densidade com ele.
+
+### Cenário C: densidade crescente (US11)
+
+Filtro: `{"base_language": "pt", "segment_types": ["advanced_vocabulary"], "density": "medium", "progression": "increasing"}`.
+O vocabulário avançado são as palavras difíceis de nível `advanced` com equivalente alinhado em português; o texto e a
+narração ficam em português, e a palavra é falada em inglês (`<lang xml:lang="en-US">`) pela mesma voz.
+
+- `progression`: `fixed` (padrão, Cenários A e B; fica fora das regras salvas, então o hash dos filtros antigos não
+  muda) ou `increasing` (obrigatória no Cenário C). Os Cenários A e C têm a mesma base, mas não se misturam no mesmo
+  filtro.
+- A curva (`DensityCurve`, em `app/modules/audio/composer/density.py`) dá a fração-alvo de cada frase: a frase `i` de
+  `n` fica na posição `x = (i + 0,5) / n` e tem alvo `final x (1 + 4x) / 5`, ou seja, 20% da densidade final no começo
+  subindo em linha reta até ela no fim. A `density` do filtro é a densidade **final**.
+- A seleção usa o método do **acumulador**: cada candidato soma o alvo da sua frase e é trocado quando o acumulado passa
+  de uma troca inteira (começando em meia troca). Até qualquer ponto da história, o número de trocas é a soma da curva
+  arredondada; é determinístico e feito só com inteiros, e o front (`swaps.ts`) repete a mesma conta.
 
 ### `POST /stories/{story_id}/audio`
 

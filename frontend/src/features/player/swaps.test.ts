@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pickEvenly, selectSwapIds } from './swaps'
+import { curveTarget, formatShare, pickEvenly, pickWithCurve, selectSwapIds, sentenceTarget } from './swaps'
 import type { FilterRules } from '../filters/api'
 import type { StoryAnnotation, StorySegment } from '../stories/api'
 
@@ -67,5 +67,55 @@ describe('selectSwapIds', () => {
 
   it('sem anotações devolve conjunto vazio', () => {
     expect(selectSwapIds([], scenarioA('high')).size).toBe(0)
+  })
+})
+
+// Mesmos valores de backend/tests/test_density_curve.py: o player precisa destacar o que o áudio fala
+describe('densidade crescente (espelho do DensityCurve)', () => {
+  const umaPorFrase = (total: number) => Array.from({ length: total }, (_, i) => i)
+
+  it('a curva começa em 1/5 da densidade final e chega a ela no fim', () => {
+    expect(curveTarget('medium', 0)).toBeCloseTo(0.07)
+    expect(curveTarget('medium', 1)).toBeCloseTo(0.35)
+    expect(sentenceTarget('medium', 'increasing', 9, 10)).toBeCloseTo(curveTarget('medium', 0.95))
+    expect(sentenceTarget('medium', undefined, 0, 10)).toBe(0.35)
+  })
+
+  it('dá os mesmos índices do backend (método do acumulador)', () => {
+    expect(pickWithCurve(umaPorFrase(30), 30, 'low')).toEqual([9, 20, 28])
+    expect(pickWithCurve(umaPorFrase(30), 30, 'medium')).toEqual([5, 11, 16, 20, 24, 27])
+    expect(pickWithCurve(umaPorFrase(30), 30, 'high')).toEqual([3, 8, 11, 14, 17, 19, 21, 24, 25, 27, 29])
+  })
+
+  it('histórias curtas ou sem candidatos não dão erro', () => {
+    expect(pickWithCurve([], 3, 'high')).toEqual([])
+    expect(pickWithCurve([0], 1, 'low')).toEqual([])
+    expect(pickWithCurve([0, 0, 1, 2], 3, 'high')).toEqual([2])
+  })
+
+  it('Cenário C: só as palavras raras, com a curva pela posição das frases', () => {
+    const frases = Array.from({ length: 30 }, (_, i) =>
+      segmentWith(
+        [
+          annotation(i + 1, { kind: 'difficult_word', extra: { level: 'advanced' } }),
+          annotation(100 + i, { kind: 'difficult_word', extra: { level: 'intermediate' }, en_start: 50 }),
+        ],
+        i,
+      ),
+    )
+    const rules: FilterRules = {
+      base_language: 'pt', segment_types: ['advanced_vocabulary'], density: 'medium', progression: 'increasing',
+    }
+    expect([...selectSwapIds(frases, rules)].sort((a, b) => a - b)).toEqual([6, 12, 17, 21, 25, 28])
+    // fora de ordem dá o mesmo resultado: a posição é a da frase
+    expect(selectSwapIds([...frases].reverse(), rules)).toEqual(selectSwapIds(frases, rules))
+    // sem a progressão, volta à densidade fixa (a mesma de antes da US11)
+    const { progression: _, ...fixa } = rules
+    expect(selectSwapIds(frases, fixa).size).toBe(pickEvenly(30, 'medium').length)
+  })
+
+  it('formata porcentagens com vírgula decimal', () => {
+    expect(formatShare(0.07)).toBe('7%')
+    expect(formatShare(0.175)).toBe('17,5%')
   })
 })

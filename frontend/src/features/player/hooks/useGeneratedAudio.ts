@@ -125,6 +125,14 @@ export function useGeneratedAudio(storyId: number, filterId: number | null) {
   // Ao terminar uma frase, segue para a próxima (se ainda não estiver pronta, o player espera)
   const next = useCallback(() => setIndex(currentIndex + 1), [currentIndex])
   const restart = useCallback(() => setIndex(0), [])
+  // Pula para uma frase (ex.: coluna da faixa de densidade); se ela falhou, segue para a próxima que dá
+  const goTo = useCallback(
+    (segmentId: number) => {
+      const target = segments.findIndex((s) => s.segment_id === segmentId)
+      if (target >= 0) setIndex(target)
+    },
+    [segments],
+  )
 
   return {
     status,
@@ -140,5 +148,6 @@ export function useGeneratedAudio(storyId: number, filterId: number | null) {
     skippedCount,
     next,
     restart,
+    goTo,
   }
 }
