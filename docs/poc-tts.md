@@ -80,3 +80,9 @@ com troca de idioma, confere que o MP3 é tocável e que `duration_ms` (2.328 ms
 - **Voz padrão:** `pt-BR-ThalitaMultilingualNeural`, porque o público principal tem o português como idioma base (cenários
   A e C). _Confirmar com a média de naturalidade acima._
 - **Trocar a voz** é só mudar `TTS_VOICE_ID` no `backend/.env`, sem mexer em código (ver README, seção "TTS real").
+- **Voz por idioma base (#106):** `TTS_VOICE_ID_PT` vale para filtros com base português (cenários A e C) e
+  `TTS_VOICE_ID_EN` para base inglês (cenário B); vazias, valem a `TTS_VOICE_ID`. O que o código garante: a voz
+  escolhida narra a frase **inteira** (o trecho trocado vai no outro idioma, com a mesma voz) e fica registrada no
+  `AudioAsset` e na chave do cache. _Pendente (depende de gente ouvindo):_ comparar pelo menos duas vozes com o inglês
+  como base (`base-ingles` na tabela de naturalidade acima, nota de pelo menos 3 pessoas) e registrar aqui qual
+  voz fica em `TTS_VOICE_ID_EN`. Até lá, o cenário B usa a voz padrão.

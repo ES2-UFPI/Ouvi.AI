@@ -56,11 +56,13 @@ def get_session_factory() -> Callable[[], Session]:
 def get_generation_service(
     db: Session = Depends(get_db),
 ) -> AudioGenerationService:
+    settings = get_settings()
     return AudioGenerationService(
         StoryService.from_session(db),
         get_filter_service(db),
         AudioAssetRepository(db),
-        voice_id=get_settings().tts_voice_id,
+        voice_id=settings.tts_voice_id,
+        voices={lang: settings.voice_for(lang) for lang in ("pt", "en")},
     )
 
 
@@ -132,7 +134,7 @@ def request_story_audio(
             session_factory,
             tts,
             storage,
-            voice_id=service.voice_id,
+            voice_id=request.voice_id,
             story_id=story_id,
             rules=request.rules,
             user_id=user.id,

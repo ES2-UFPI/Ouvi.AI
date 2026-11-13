@@ -51,11 +51,20 @@ class Settings(BaseSettings):
     tts_region: str = ""
     # Voz usada na síntese. O provedor falso ignora; no fornecedor real, é o nome da voz
     tts_voice_id: str = FAKE_VOICE_ID
+    # Voz por idioma BASE do filtro (a que narra a frase; o trecho trocado vai no outro idioma, com a mesma voz).
+    # Vazia = usa TTS_VOICE_ID, então quem só define a voz padrão não muda nada
+    tts_voice_id_pt: str = ""
+    tts_voice_id_en: str = ""
     # Preço do fornecedor por 1.000 caracteres, só para a estimativa de custo evitado pelo cache de áudio
     # (`python -m app.modules.audio.cache stats`). 0 = não definido: o custo evitado aparece zerado
     tts_cost_per_1k_chars: float = 0.0
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    def voice_for(self, base_language: str) -> str:
+        """Voz da narração para o idioma base do filtro (`pt` ou `en`): a específica, ou a padrão."""
+        specific = {"pt": self.tts_voice_id_pt, "en": self.tts_voice_id_en}.get(base_language, "")
+        return specific or self.tts_voice_id
 
     @property
     def cors_origins_list(self) -> list[str]:
