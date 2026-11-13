@@ -208,7 +208,7 @@ def test_tts_error_nao_tenta_de_novo_por_padrao():
 
 def test_o_valor_padrao_e_o_provedor_falso():
     """Um clone novo, sem chave de API, sobe com o provedor falso."""
-    settings = Settings()
+    settings = Settings(_env_file=None)  # sem ler o backend/.env: quem tem chave nele não quebra o teste
     assert settings.tts_provider == "fake"
     assert settings.tts_api_key == ""
     assert isinstance(create_tts_provider(settings), FakeTTSProvider)
