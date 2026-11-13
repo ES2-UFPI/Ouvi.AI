@@ -92,6 +92,28 @@ describe('useProgressSaver', () => {
     expect(saveOnExit).toHaveBeenLastCalledWith(1, expect.objectContaining({ offset_ms: 4000 }))
   })
 
+  it('ao sair da tela por um link da aplicação (sem fechar a página), envia a posição', () => {
+    const { unmount } = setup({ playing: true })
+    position = { segmentPosition: 4, offsetMs: 3200 }
+
+    unmount()
+
+    expect(saveOnExit).toHaveBeenCalledTimes(1)
+    expect(saveOnExit).toHaveBeenLastCalledWith(1, expect.objectContaining({ segment_position: 4, offset_ms: 3200 }))
+  })
+
+  it('ao sair da tela sem nada novo para guardar ou antes da escolha de retomar, não envia', async () => {
+    const pronto = setup({ playing: true })
+    await avancar(SAVE_INTERVAL_MS) // salva a posição atual
+    saveOnExit.mockClear()
+    pronto.unmount() // a posição não mudou desde o último salvamento
+    expect(saveOnExit).not.toHaveBeenCalled()
+
+    const aguardando = setup({ playing: false, enabled: false })
+    aguardando.unmount()
+    expect(saveOnExit).not.toHaveBeenCalled()
+  })
+
   it('ao voltar para a aba não envia nada', () => {
     setup({ playing: true })
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')

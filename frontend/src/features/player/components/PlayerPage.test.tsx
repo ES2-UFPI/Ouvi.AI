@@ -226,6 +226,29 @@ describe('PlayerPage', () => {
     )
   })
 
+  it('o atalho "Início" está sempre à mão: preparando, com o cartão de retomada e tocando', async () => {
+    vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready', 'ready']))
+    vi.mocked(progressApi.getProgress).mockResolvedValue({
+      story_id: 1, filter_id: 7, segment_position: 1, offset_ms: 2000, completed: false, client_time: '', updated_at: '',
+    })
+    renderPlayer()
+
+    // Enquanto prepara (a consulta do progresso ainda não voltou), já existe o caminho para a tela inicial
+    expect(screen.getByRole('link', { name: 'Início' })).toHaveAttribute('href', '/')
+    // Com o cartão de retomada
+    fireEvent.click(await screen.findByRole('button', { name: 'Continuar' }))
+    expect(screen.getByRole('link', { name: 'Início' })).toHaveAttribute('href', '/')
+    // Tocando
+    await screen.findByText('Frase 2 de 2')
+    expect(screen.getByRole('link', { name: 'Início' })).toHaveAttribute('href', '/')
+  })
+
+  it('sem filtro e com história inválida, o atalho "Início" também aparece', async () => {
+    renderPlayer('/player/1')
+    expect(await screen.findByText(/Escolha um filtro/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Início' })).toHaveAttribute('href', '/')
+  })
+
   // ---------- áudio único da história ----------
 
   it('com a geração pronta, toca a história inteira num áudio só, sem buscar as frases uma a uma', async () => {

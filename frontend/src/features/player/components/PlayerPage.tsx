@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Home } from 'lucide-react'
 import { getFilter } from '../../filters/api'
 import {
   DENSITY_LABELS,
@@ -274,13 +274,23 @@ function PlayerPageContent() {
 
   return (
     <PageLayout>
-      <button
-        onClick={() => navigate(-1)}
-        className="flex items-center gap-1.5 text-text-muted hover:text-text-primary transition-colors text-sm mb-5"
-      >
-        <ArrowLeft size={16} />
-        Voltar
-      </button>
+      <div className="flex items-center justify-between mb-5">
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-1.5 text-text-muted hover:text-text-primary transition-colors text-sm"
+        >
+          <ArrowLeft size={16} />
+          Voltar
+        </button>
+        {/* Atalho direto para a tela inicial, de qualquer ponto do áudio (a posição é salva sozinha) */}
+        <Link
+          to="/"
+          className="flex items-center gap-1.5 text-text-muted hover:text-text-primary transition-colors text-sm"
+        >
+          <Home size={16} aria-hidden="true" />
+          Início
+        </Link>
+      </div>
 
       {validStory && filterId === null ? (
         <div className="rounded-2xl bg-bg-surface border border-border-subtle p-7 shadow-2xl shadow-black/40">

@@ -101,15 +101,27 @@ export function useProgressSaver({ storyId, filterId, enabled, playing, getPosit
     wasPlaying.current = playing
   }, [playing, save])
 
-  // Ao fechar ou esconder a página (trocar de aba): o fetch com keepalive termina mesmo com a página saindo
+  // Salvamento de saída: o fetch com keepalive termina mesmo com a página (ou a tela) saindo
+  const saveOnExit = useCallback(() => {
+    if (!enabled) return
+    const payload = payloadOf({ completed: false })
+    if (!payload) return
+    const key = `${payload.segment_position}:${payload.offset_ms}:${payload.completed}`
+    if (key !== lastSaved.current) saveProgressOnExit(storyId, payload)
+  }, [enabled, payloadOf, storyId])
+
+  // Ao sair do player por um link da própria aplicação (ex.: "Início"), a página não é fechada e o
+  // `pagehide` não dispara: a saída da tela também salva a posição
+  const saveOnExitRef = useRef(saveOnExit)
+  useEffect(() => {
+    saveOnExitRef.current = saveOnExit
+  })
+  useEffect(() => () => saveOnExitRef.current(), [])
+
+  // Ao fechar ou esconder a página (trocar de aba)
   useEffect(() => {
     if (!enabled) return
-    const onExit = () => {
-      const payload = payloadOf({ completed: false })
-      if (!payload) return
-      const key = `${payload.segment_position}:${payload.offset_ms}:${payload.completed}`
-      if (key !== lastSaved.current) saveProgressOnExit(storyId, payload)
-    }
+    const onExit = saveOnExit
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') onExit()
     }
@@ -119,7 +131,7 @@ export function useProgressSaver({ storyId, filterId, enabled, playing, getPosit
       window.removeEventListener('pagehide', onExit)
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [enabled, payloadOf, storyId])
+  }, [enabled, saveOnExit])
 
   // Ao terminar a história: marca como concluída (na última frase, no começo dela)
   const markCompleted = useCallback(
