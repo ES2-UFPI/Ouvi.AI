@@ -24,6 +24,14 @@ from tests.test_audio_facade import REGRAS, VOZ, assets_da, nova_historia
 SEM_TROCAS = {"base_language": "pt", "segment_types": [], "density": "high"}
 
 
+@pytest.fixture(autouse=True)
+def cache_vazio(db_session):
+    """O cache é GLOBAL: blobs que já existam no banco de desenvolvimento (de uso real) mudariam as contagens e
+    os acertos. Esvazia-o dentro da transação do teste, que é desfeita no fim (o banco real não é tocado)."""
+    db_session.execute(delete(AudioBlob))
+    db_session.flush()
+
+
 @pytest.fixture
 def storage() -> InMemoryStorage:
     return InMemoryStorage()
