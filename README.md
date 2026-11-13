@@ -532,15 +532,25 @@ seleção por conta própria: ela usa o mesmo `AudioComposer` da geração de á
 
 O contrato completo está no `/docs` (Swagger), com os schemas `PreviewRead` e `SwapRead`.
 
-## Filtro de Audição e player (front)
+## Telas do front: início, filtro e player
 
-1. Em `/filter`, escolha a história, o idioma base, o tipo de trecho e a densidade, e clique em **Salvar filtro**.
+O caminho do usuário é **login → tela inicial → filtro → player**:
+
+1. **Tela inicial (`/`)**, onde o login cai: saudação com o seu nome, a seção **Continuar ouvindo** (até 5 histórias
+   em andamento, com barra de progresso e "frase 7 de 12"), a lista de **Histórias** e o botão **Sair**. **Continuar**
+   abre o player com o filtro que você estava usando; **Ouvir** abre o filtro com aquela história já escolhida.
+2. **Filtro (`/filter?story=<id>`)**: escolha o idioma base, o tipo de trecho e a densidade, e clique em **Salvar filtro**.
    O botão fica desativado até haver idioma base e pelo menos um tipo de trecho. O filtro é gravado em `/filters`,
-   vinculado ao seu usuário, e reaparece preenchido ao reabrir a tela (um filtro por história).
-2. Com o filtro salvo, **Ouvir** leva a `/player/<história>?filter=<id>`. O player pede a URL assinada em
-   `GET /audio/url` e toca com a tag `<audio>`: pular na barra usa HTTP Range. Há play/pausa, voltar e avançar 15 s,
-   velocidades de 0,75x a 2x (sem mudar o tom da voz), tempo atual e duração, indicador de carregamento e mensagem
-   de erro.
+   vinculado ao seu usuário, e reaparece preenchido ao reabrir a tela (um filtro por história). **Início** volta à tela inicial.
+3. **Player (`/player/<história>?filter=<id>`)**: com o filtro salvo, **Ouvir** gera o áudio (em segundo plano, frase a
+   frase) e começa a tocar assim que a primeira frase fica pronta. Há play/pausa, voltar e avançar 15 s, velocidades
+   de 0,75x a 2x (sem mudar o tom da voz), a frase tocando destacada no texto e os trechos trocados marcados.
+
+**Retomar de onde parou.** O player guarda a posição sozinho, sem o usuário perceber: a cada 5 s enquanto toca, ao
+pausar e ao fechar ou esconder a página (`PUT /stories/{id}/progress`); uma falha de rede é ignorada e a posição vai no
+ciclo seguinte. Ao abrir uma história já começada, um cartão pergunta **Continuar** (volta à frase e ao ponto salvos) ou
+**Recomeçar** (apaga o progresso). Ao terminar a história, ela é marcada como concluída e sai de "Continuar ouvindo".
+Como o progresso fica no servidor, funciona em outro navegador, logado na mesma conta.
 
 ## Testes e integração contínua
 

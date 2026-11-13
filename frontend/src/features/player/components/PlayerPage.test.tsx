@@ -175,6 +175,17 @@ describe('PlayerPage', () => {
     expect(audioDe(container)).toHaveAttribute('src', urlDaFrase(1))
   })
 
+  it('ao terminar a história, oferece ouvir de novo e voltar ao início', async () => {
+    vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready']))
+    const { container } = renderPlayer()
+    await screen.findByLabelText('Reproduzir')
+
+    fireEvent(audioDe(container), new Event('ended'))
+
+    expect(await screen.findByRole('button', { name: 'Ouvir de novo' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Voltar ao início' })).toHaveAttribute('href', '/')
+  })
+
   it('ao terminar a história, marca o progresso como concluído na última frase', async () => {
     vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready', 'ready']))
     const { container } = renderPlayer()

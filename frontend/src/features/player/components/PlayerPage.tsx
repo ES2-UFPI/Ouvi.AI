@@ -219,7 +219,7 @@ function PlayerPageContent() {
             />
           )}
           {audio.finished && (
-            <div className="text-center mt-3">
+            <div className="flex items-center justify-center gap-5 mt-3">
               <button
                 type="button"
                 onClick={audio.restart}
@@ -227,6 +227,9 @@ function PlayerPageContent() {
               >
                 Ouvir de novo
               </button>
+              <Link to="/" className="text-sm text-text-muted hover:text-text-primary transition-colors">
+                Voltar ao início
+              </Link>
             </div>
           )}
         </>

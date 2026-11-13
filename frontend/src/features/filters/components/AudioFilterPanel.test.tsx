@@ -109,6 +109,11 @@ function axios422(msg: string) {
 }
 
 describe('AudioFilterPanel', () => {
+  it('tem um caminho de volta para a tela inicial', async () => {
+    renderPanel()
+    expect(await screen.findByRole('link', { name: 'Início' })).toHaveAttribute('href', '/')
+  })
+
   it('vindo da tela inicial (?story=2), a história já chega escolhida', async () => {
     renderPanel('/filter?story=2')
     await screen.findByRole('option', { name: 'A Lebre e a Tartaruga' })
