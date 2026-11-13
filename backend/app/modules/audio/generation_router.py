@@ -23,14 +23,18 @@ from app.modules.audio.generation_service import (
     InvalidFilterRulesError,
     SegmentAudioFailedError,
     SegmentAudioNotReadyError,
+    StoryAudioNotReadyError,
     jobs,
 )
+from app.modules.audio.full_track import FullTrackBuilder, UnsupportedAudioFormat
 from app.modules.audio.repository import AudioAssetRepository
 from app.modules.audio.router import get_audio_service
 from app.modules.audio.schemas import (
     AudioGenerationCreate,
     AudioGenerationStatusRead,
+    FullAudioRead,
     SegmentAudioRead,
+    TrackSegmentRead,
 )
 from app.modules.audio.service import AudioService
 from app.modules.auth.dependencies import get_current_user
@@ -207,4 +211,60 @@ def get_segment_audio(
         segment_id=segment_id,
         duration_ms=asset.duration_ms,
         format=asset.format,
+    )
+
+
+@router.get(
+    "/stories/{story_id}/audio/full",
+    response_model=FullAudioRead,
+    summary="Áudio único da história, com a linha do tempo de cada frase",
+    responses={
+        **_ERRORS,
+        409: {"description": "Alguma frase ainda não terminou de ser gerada, ou nenhuma ficou pronta"},
+        503: {"description": "Armazenamento indisponível"},
+    },
+)
+def get_story_full_audio(
+    story_id: int,
+    request: Request,
+    filter_id: int = Query(..., description="Filtro de audição, do usuário logado"),
+    user: User = Depends(get_current_user),
+    service: AudioGenerationService = Depends(get_generation_service),
+    audio: AudioService = Depends(get_audio_service),
+    storage: ObjectStorage = Depends(get_storage),
+) -> FullAudioRead:
+    """Junta o áudio de todas as frases prontas num arquivo só (montado na primeira vez e reaproveitado) e
+    devolve a URL assinada dele (`GET /audio/stream`, com Range) e onde cada frase começa. O player usa isto
+    para tocar a história inteira de uma vez, com uma barra de progresso única. Frases que falharam ficam de
+    fora e vêm em `skipped`."""
+
+    def ready_parts():
+        try:
+            return service.full_track_parts(user, story_id, filter_id)
+        except StoryAudioNotReadyError:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="O áudio da história ainda não está pronto"
+            )
+
+    parts = _call(ready_parts)
+    try:
+        track = FullTrackBuilder(storage).build(parts.assets, parts.positions)
+        params = audio.sign(track.storage_key)
+    except UnsupportedAudioFormat:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Não foi possível juntar o áudio da história"
+        )
+    except StorageObjectNotFound:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Áudio não encontrado")
+    except StorageError:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Armazenamento indisponível")
+
+    url = request.url_for("stream_audio").include_query_params(**params)
+    return FullAudioRead(
+        url=str(url),
+        expires_at=datetime.fromtimestamp(int(params["expires"]), tz=timezone.utc),
+        duration_ms=track.duration_ms,
+        format=track.format,
+        segments=[TrackSegmentRead(**vars(s)) for s in track.segments],
+        skipped=parts.skipped,
     )
