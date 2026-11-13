@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
@@ -12,6 +12,7 @@ import {
 } from '../../filters/labels'
 import { PageLayout } from '../../../shared/components/PageLayout'
 import { getStoryPreview, getStorySegments, listStories } from '../../stories/api'
+import { useProgressSaver } from '../../progress/useProgressSaver'
 import { useGeneratedAudio } from '../hooks/useGeneratedAudio'
 import { AudioPlayer } from './AudioPlayer'
 import { selectSwapIds } from '../swaps'
@@ -44,6 +45,31 @@ function PlayerPageContent() {
   })
   // Gera o áudio com o filtro e toca frase a frase, conforme cada uma fica pronta
   const audio = useGeneratedAudio(validStory ? storyId : NaN, filterId)
+
+  // Progresso: a posição é salva sozinha (a cada 5 s, ao pausar e ao sair); o usuário não percebe
+  const [playing, setPlaying] = useState(false)
+  const offsetMs = useRef(0)
+  const onTick = useCallback((seconds: number) => {
+    offsetMs.current = seconds * 1000
+  }, [])
+  const currentSegmentId = audio.current?.segment_id ?? null
+  const currentPosition = audio.current?.position ?? null
+  // Nova frase: o ponto dentro da anterior não vale mais
+  useEffect(() => {
+    offsetMs.current = 0
+  }, [currentSegmentId])
+  const { markCompleted } = useProgressSaver({
+    storyId,
+    filterId,
+    enabled: validStory && filterId !== null,
+    playing,
+    getPosition: () =>
+      currentPosition === null ? null : { segmentPosition: currentPosition, offsetMs: offsetMs.current },
+  })
+  const lastPosition = audio.segments.length ? audio.segments[audio.segments.length - 1].position : null
+  useEffect(() => {
+    if (audio.finished && lastPosition !== null) markCompleted({ segmentPosition: lastPosition, offsetMs: 0 })
+  }, [audio.finished, lastPosition, markCompleted])
 
   const segments = useQuery({
     queryKey: ['segments', storyId],
@@ -140,6 +166,8 @@ function PlayerPageContent() {
             subtitle={subtitle}
             waitingMessage={waitingMessage}
             notice={notice}
+            onPlayingChange={setPlaying}
+            onTick={onTick}
           />
           {increasing && preview.data && (
             <DensityStrip

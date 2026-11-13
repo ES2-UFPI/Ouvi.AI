@@ -7,11 +7,13 @@ import { PlayerPage } from './PlayerPage'
 import * as filtersApi from '../../filters/api'
 import * as storiesApi from '../../stories/api'
 import * as playerApi from '../api'
+import * as progressApi from '../../progress/api'
 import type { AudioGenerationStatus, GenerationState } from '../api'
 
 vi.mock('../../filters/api')
 vi.mock('../../stories/api')
 vi.mock('../api')
+vi.mock('../../progress/api')
 
 function erroHttp(status: number) {
   return new AxiosError('falhou', 'ERR_BAD_REQUEST', undefined, null, {
@@ -83,6 +85,8 @@ beforeEach(() => {
     created_at: '',
     updated_at: '',
   })
+  vi.mocked(progressApi.getProgress).mockResolvedValue(null)
+  vi.mocked(progressApi.saveProgress).mockResolvedValue({} as never)
   vi.mocked(playerApi.getSegmentAudio).mockImplementation(async (segmentId) => ({
     url: urlDaFrase(segmentId),
     expires_at: '',
@@ -131,6 +135,63 @@ describe('PlayerPage', () => {
 
     expect(await screen.findByText('Frase 2 de 2')).toBeInTheDocument()
     expect(audioDe(container)).toHaveAttribute('src', urlDaFrase(2))
+  })
+
+  it('ao pausar, guarda a posição da frase sem o usuário perceber', async () => {
+    vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready', 'ready']))
+    const { container } = renderPlayer()
+    await screen.findByLabelText('Reproduzir')
+    await act(async () => {}) // o player liga os ouvintes do <audio> num efeito: espera ele rodar
+    const audio = audioDe(container)
+
+    fireEvent(audio, new Event('play'))
+    audio.currentTime = 1.5
+    fireEvent(audio, new Event('timeupdate'))
+    fireEvent(audio, new Event('pause'))
+
+    await vi.waitFor(() =>
+      expect(progressApi.saveProgress).toHaveBeenCalledWith(1, {
+        segment_position: 0,
+        offset_ms: 1500,
+        filter_id: 7,
+        completed: false,
+      }),
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('uma falha ao salvar o progresso não interrompe o áudio nem mostra erro', async () => {
+    vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready']))
+    vi.mocked(progressApi.saveProgress).mockRejectedValue(new Error('sem rede'))
+    const { container } = renderPlayer()
+    await screen.findByLabelText('Reproduzir')
+    await act(async () => {})
+
+    fireEvent(audioDe(container), new Event('play'))
+    fireEvent(audioDe(container), new Event('pause'))
+
+    await vi.waitFor(() => expect(progressApi.saveProgress).toHaveBeenCalled())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(audioDe(container)).toHaveAttribute('src', urlDaFrase(1))
+  })
+
+  it('ao terminar a história, marca o progresso como concluído na última frase', async () => {
+    vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready', 'ready']))
+    const { container } = renderPlayer()
+    await screen.findByLabelText('Reproduzir')
+
+    fireEvent(audioDe(container), new Event('ended'))
+    await screen.findByText('Frase 2 de 2')
+    fireEvent(audioDe(container), new Event('ended'))
+
+    await vi.waitFor(() =>
+      expect(progressApi.saveProgress).toHaveBeenCalledWith(1, {
+        segment_position: 1,
+        offset_ms: 0,
+        filter_id: 7,
+        completed: true,
+      }),
+    )
   })
 
   it('se a próxima frase ainda está sendo gerada, espera e continua quando ela fica pronta', async () => {

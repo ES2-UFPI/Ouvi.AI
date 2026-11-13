@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Headphones, Play, Pause } from 'lucide-react'
 import { SPEEDS, useAudioPlayer } from '../hooks/useAudioPlayer'
 import { formatTime } from '../formatTime'
@@ -17,6 +18,9 @@ interface AudioPlayerProps {
   waitingMessage?: string | null
   // Aviso discreto (ex.: frases puladas)
   notice?: string | null
+  // Quem usa o player acompanha se está tocando e o ponto da faixa (ex.: para salvar o progresso)
+  onPlayingChange?: (playing: boolean) => void
+  onTick?: (seconds: number) => void
 }
 
 const formatSpeed = (value: number) => `${String(value).replace('.', ',')}x`
@@ -30,6 +34,8 @@ export function AudioPlayer({
   subtitle,
   waitingMessage,
   notice,
+  onPlayingChange,
+  onTick,
 }: AudioPlayerProps) {
   const {
     audioRef,
@@ -44,6 +50,13 @@ export function AudioPlayer({
     seekTo,
     setSpeed,
   } = useAudioPlayer()
+
+  useEffect(() => {
+    onPlayingChange?.(isPlaying)
+  }, [isPlaying, onPlayingChange])
+  useEffect(() => {
+    onTick?.(currentTime)
+  }, [currentTime, onTick])
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
 
