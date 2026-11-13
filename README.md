@@ -386,7 +386,8 @@ no resto do sistema. Nenhum módulo fala direto com o fornecedor.
 | `TTS_PROVIDER` | `fake` (padrão): gera tons, sem rede e sem chave. `azure`: voz real do Azure Speech. Um valor desconhecido **derruba a API na subida**, com a lista dos que existem |
 | `TTS_API_KEY` | chave do fornecedor real (o provedor falso ignora). Nunca vai para o repositório |
 | `TTS_REGION` | região do serviço do fornecedor real (no Azure, ex.: `brazilsouth`, `eastus`) |
-| `TTS_VOICE_ID` | voz usada na síntese (no Azure, o nome da voz, ex.: `pt-BR-ThalitaMultilingualNeural`) |
+| `TTS_VOICE_ID` | voz padrão da síntese (no Azure, o nome da voz, ex.: `pt-BR-ThalitaMultilingualNeural`) |
+| `TTS_VOICE_ID_PT`, `TTS_VOICE_ID_EN` | opcionais: voz do filtro com idioma base português (`PT`) ou inglês (`EN`). Vazias, valem a `TTS_VOICE_ID` |
 
 Um clone novo sobe com `TTS_PROVIDER=fake`, sem nenhuma chave.
 
@@ -432,7 +433,11 @@ no SSML (`<voice name="...">`), então o compositor não precisa saber qual é.
 4. Reinicie a API. Sem `TTS_API_KEY` ou `TTS_REGION`, ou com a voz do provedor falso (`fake-voice`), a API não sobe
    e diz qual variável falta.
 
-**Trocar a voz** é só mudar `TTS_VOICE_ID`, sem mexer em código. Candidatas multilíngues: `pt-BR-ThalitaMultilingualNeural`,
+**Trocar a voz** é só mudar `TTS_VOICE_ID`, sem mexer em código. **Uma voz por idioma base:** o Cenário B (base inglês)
+pode ter outra voz que o A e o C (base português). Defina `TTS_VOICE_ID_PT` e/ou `TTS_VOICE_ID_EN` no `backend/.env`; a
+voz que não for definida cai na `TTS_VOICE_ID`, então quem só define a padrão não muda nada. A voz usada fica no
+`AudioAsset` e na chave do cache: trocar a voz de um idioma gera áudio novo só para os filtros desse idioma. Com
+`TTS_PROVIDER=azure`, os dois idiomas precisam acabar com uma voz do Azure (a API não sobe com a `fake-voice`). Candidatas multilíngues: `pt-BR-ThalitaMultilingualNeural`,
 `en-US-AvaMultilingualNeural` e `en-US-AndrewMultilingualNeural` (a lista completa está na
 [documentação do Azure](https://learn.microsoft.com/azure/ai-services/speech-service/language-support?tabs=tts)).
 A comparação entre elas e a voz escolhida estão em [`docs/poc-tts.md`](docs/poc-tts.md).

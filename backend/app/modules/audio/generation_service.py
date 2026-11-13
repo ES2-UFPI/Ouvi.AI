@@ -106,6 +106,7 @@ class GenerationRequest:
     start: bool  # True: o Router deve disparar a tarefa (e chamar jobs.finish(job_key) no fim)
     job_key: tuple[int, str, str]
     rules: dict[str, Any]
+    voice_id: str  # a voz escolhida para o idioma base do filtro
 
 
 class AudioGenerationService:
@@ -116,13 +117,19 @@ class AudioGenerationService:
         assets: AudioAssetRepository,
         *,
         voice_id: str,
+        voices: dict[str, str] | None = None,
         jobs: GenerationJobs = jobs,
     ) -> None:
         self.stories = stories
         self.filters = filters
         self.assets = assets
-        self.voice_id = voice_id
+        self.voice_id = voice_id  # voz padrão, para os idiomas sem voz própria
+        self.voices = voices or {}  # idioma base do filtro (`pt`/`en`) -> voz
         self.jobs = jobs
+
+    def voice_for(self, rules: dict[str, Any]) -> str:
+        """Voz da narração: a do idioma base do filtro, ou a padrão."""
+        return self.voices.get(rules["base_language"], self.voice_id)
 
     def status(self, user: User, story_id: int, filter_id: int) -> GenerationStatus:
         """Estado da geração da história com o filtro. Levanta LookupError (história),
@@ -140,10 +147,10 @@ class AudioGenerationService:
         current = self._status(story_id, filter_id, rules)
 
         if current.state == STATE_READY or not self.jobs.try_start(key):
-            return GenerationRequest(status=current, start=False, job_key=key, rules=rules)
+            return GenerationRequest(status=current, start=False, job_key=key, rules=rules, voice_id=self.voice_for(rules))
         # A tarefa vai começar: para o front, a geração já está em andamento
         started = GenerationStatus(**{**current.__dict__, "state": STATE_GENERATING})
-        return GenerationRequest(status=started, start=True, job_key=key, rules=rules)
+        return GenerationRequest(status=started, start=True, job_key=key, rules=rules, voice_id=self.voice_for(rules))
 
     def segment_audio(self, user: User, segment_id: int, filter_id: int) -> AudioAsset:
         """Áudio pronto da frase com o filtro. Levanta FilterNotFoundError, LookupError (frase),
@@ -155,7 +162,7 @@ class AudioGenerationService:
         rules = self._rules(listening_filter)
 
         asset = self.assets.get_by_segment(
-            segment_id, rules_hash=compute_rules_hash(rules), voice_id=self.voice_id
+            segment_id, rules_hash=compute_rules_hash(rules), voice_id=self.voice_for(rules)
         )
         if asset is None or asset.status in (STATUS_PENDING, STATUS_GENERATING):
             raise SegmentAudioNotReadyError()
@@ -181,7 +188,7 @@ class AudioGenerationService:
             raise InvalidFilterRulesError(str(exc)) from exc
 
     def _job_key(self, story_id: int, rules: dict[str, Any]) -> tuple[int, str, str]:
-        return (story_id, compute_rules_hash(rules), self.voice_id)
+        return (story_id, compute_rules_hash(rules), self.voice_for(rules))
 
     def _status(self, story_id: int, filter_id: int, rules: dict[str, Any]) -> GenerationStatus:
         _, segments = self.stories.get_segments(story_id)

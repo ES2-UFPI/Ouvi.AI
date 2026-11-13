@@ -19,10 +19,11 @@ def _build_azure(settings: Settings) -> TTSProvider:
     if missing:
         raise ValueError(f"TTS_PROVIDER=azure precisa de {' e '.join(missing)} no ambiente (ou no backend/.env)")
     # A voz padrão é a do provedor falso: o Azure recusaria com 400 só na primeira síntese
-    if not settings.tts_voice_id or settings.tts_voice_id == FAKE_VOICE_ID:
+    # (vale para as duas vozes por idioma base: cada uma cai na TTS_VOICE_ID quando não é definida)
+    if any(not settings.voice_for(lang) or settings.voice_for(lang) == FAKE_VOICE_ID for lang in ("pt", "en")):
         raise ValueError(
             "TTS_PROVIDER=azure precisa de uma voz do Azure em TTS_VOICE_ID "
-            "(ex.: pt-BR-ThalitaMultilingualNeural)"
+            "(ex.: pt-BR-ThalitaMultilingualNeural), ou em TTS_VOICE_ID_PT e TTS_VOICE_ID_EN"
         )
     return AzureTTSAdapter(api_key=settings.tts_api_key, region=settings.tts_region)
 
