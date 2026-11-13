@@ -58,6 +58,11 @@ class SegmentRepository:
         stmt = select(func.count()).select_from(Segment).where(Segment.story_id == story_id)
         return self.db.scalar(stmt) or 0
 
+    def count_by_stories(self) -> dict[int, int]:
+        """Número de frases de cada história numa única consulta (histórias sem frases não aparecem)."""
+        stmt = select(Segment.story_id, func.count()).group_by(Segment.story_id)
+        return {story_id: total for story_id, total in self.db.execute(stmt)}
+
     def list_by_story(
         self, story_id: int, kind: str | None = None, aligned_only: bool = False
     ) -> list[Segment]:

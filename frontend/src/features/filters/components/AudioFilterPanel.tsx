@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import axios from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ChevronDown, Headphones, SlidersHorizontal } from 'lucide-react'
 import { getStoryPreview, listStories, type StoryPreview } from '../../stories/api'
 import {
@@ -157,7 +157,12 @@ function ExampleSentence({ segment }: { segment: StoryPreview['segments'][number
 
 export function AudioFilterPanel() {
   const queryClient = useQueryClient()
-  const [selectedStory, setSelectedStory] = useState<number | null>(null)
+  // Vindo da tela inicial (`/filter?story=3`), a história já chega escolhida
+  const [searchParams] = useSearchParams()
+  const storyParam = Number(searchParams.get('story'))
+  const [selectedStory, setSelectedStory] = useState<number | null>(
+    Number.isInteger(storyParam) && storyParam > 0 ? storyParam : null,
+  )
   // Só guarda o que o usuário mexeu; sem edição, o formulário mostra o filtro salvo
   const [draft, setDraft] = useState<FormValues | null>(null)
 

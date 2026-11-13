@@ -12,8 +12,8 @@ vi.mock('../api')
 vi.mock('../../stories/api')
 
 const STORIES = [
-  { id: 1, title: 'A Raposa e as Uvas', description: null },
-  { id: 2, title: 'A Lebre e a Tartaruga', description: null },
+  { id: 1, title: 'A Raposa e as Uvas', description: null, segment_count: 3 },
+  { id: 2, title: 'A Lebre e a Tartaruga', description: null, segment_count: 3 },
 ]
 
 const saved = (overrides = {}) => ({
@@ -25,11 +25,11 @@ const saved = (overrides = {}) => ({
   ...overrides,
 })
 
-function renderPanel() {
+function renderPanel(rota = '/filter') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[rota]}>
         <AudioFilterPanel />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -109,6 +109,18 @@ function axios422(msg: string) {
 }
 
 describe('AudioFilterPanel', () => {
+  it('vindo da tela inicial (?story=2), a história já chega escolhida', async () => {
+    renderPanel('/filter?story=2')
+    await screen.findByRole('option', { name: 'A Lebre e a Tartaruga' })
+    expect(screen.getByRole('combobox', { name: /história/i })).toHaveValue('2')
+  })
+
+  it('com um ?story= inválido, escolhe a primeira história', async () => {
+    renderPanel('/filter?story=abc')
+    await screen.findByRole('option', { name: 'A Raposa e as Uvas' })
+    expect(screen.getByRole('combobox', { name: /história/i })).toHaveValue('1')
+  })
+
   it('lista as histórias e as opções de idioma base e densidade', async () => {
     renderPanel()
     expect(await screen.findByRole('option', { name: 'A Raposa e as Uvas' })).toBeInTheDocument()

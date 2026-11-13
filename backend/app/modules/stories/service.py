@@ -18,6 +18,11 @@ class StoryService:
     def list_stories(self) -> list[Story]:
         return self.stories.list_all()
 
+    def list_stories_with_counts(self) -> list[tuple[Story, int]]:
+        """Cada história com o número de frases (uma consulta a mais, não uma por história)."""
+        counts = self.segments.count_by_stories()
+        return [(story, counts.get(story.id, 0)) for story in self.stories.list_all()]
+
     def get_segments(
         self, story_id: int, kind: str | None = None, aligned_only: bool = False
     ) -> tuple[Story, list[Segment]]:

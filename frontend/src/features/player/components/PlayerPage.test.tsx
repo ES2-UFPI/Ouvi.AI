@@ -66,7 +66,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true })
   vi.resetAllMocks()
   vi.mocked(storiesApi.listStories).mockResolvedValue([
-    { id: 1, title: 'A Raposa e as Uvas', description: null },
+    { id: 1, title: 'A Raposa e as Uvas', description: null, segment_count: 3 },
   ])
   vi.mocked(storiesApi.getStorySegments).mockResolvedValue({
     story: { id: 1, title: 'A Raposa e as Uvas', language: 'en' },
