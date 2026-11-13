@@ -194,6 +194,130 @@ describe('PlayerPage', () => {
     )
   })
 
+  // ---------- retomar de onde parou (#98) ----------
+
+  const progressoSalvo = (extra: Partial<progressApi.Progress> = {}): progressApi.Progress => ({
+    story_id: 1,
+    filter_id: 7,
+    segment_position: 2,
+    offset_ms: 3000,
+    completed: false,
+    client_time: '',
+    updated_at: '',
+    ...extra,
+  })
+
+  it('com progresso salvo, mostra o cartão e não toca nem gera nada antes da escolha', async () => {
+    vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready', 'ready', 'ready']))
+    vi.mocked(progressApi.getProgress).mockResolvedValue(progressoSalvo())
+    const { container } = renderPlayer()
+
+    const cartao = await screen.findByRole('region', { name: 'A Raposa e as Uvas' })
+    expect(cartao).toHaveTextContent('Você parou na frase 3 de 3.')
+    expect(cartao).toHaveTextContent('Cerca de 0:03 dentro da frase.')
+    expect(screen.getByRole('button', { name: 'Continuar' })).toHaveFocus()
+    expect(container.querySelector('audio')).toBeNull()
+    expect(playerApi.getSegmentAudio).not.toHaveBeenCalled()
+    expect(progressApi.saveProgress).not.toHaveBeenCalled()
+  })
+
+  it('"Continuar" começa exatamente na frase salva e no ponto salvo', async () => {
+    vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready', 'ready', 'ready']))
+    vi.mocked(progressApi.getProgress).mockResolvedValue(progressoSalvo())
+    const { container } = renderPlayer()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Continuar' }))
+
+    expect(await screen.findByText('Frase 3 de 3')).toBeInTheDocument()
+    const audio = audioDe(container)
+    expect(audio).toHaveAttribute('src', urlDaFrase(3))
+    expect(audio).toHaveAttribute('autoplay')
+    expect(progressApi.deleteProgress).not.toHaveBeenCalled()
+
+    // O ponto salvo é aplicado quando a faixa tem duração (o ouvinte é ligado num efeito: espera ele rodar)
+    await act(async () => {})
+    Object.defineProperty(audio, 'duration', { configurable: true, value: 10 })
+    fireEvent(audio, new Event('loadedmetadata'))
+    expect(audio.currentTime).toBe(3)
+  })
+
+  it('"Recomeçar" apaga o progresso e toca do início', async () => {
+    vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready', 'ready', 'ready']))
+    vi.mocked(progressApi.getProgress).mockResolvedValue(progressoSalvo())
+    vi.mocked(progressApi.deleteProgress).mockResolvedValue(undefined)
+    const { container } = renderPlayer()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Recomeçar' }))
+
+    expect(await screen.findByText('Frase 1 de 3')).toBeInTheDocument()
+    expect(audioDe(container)).toHaveAttribute('src', urlDaFrase(1))
+    expect(progressApi.deleteProgress).toHaveBeenCalledWith(1)
+  })
+
+  it('se não foi possível apagar o progresso, recomeça mesmo assim', async () => {
+    vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready', 'ready', 'ready']))
+    vi.mocked(progressApi.getProgress).mockResolvedValue(progressoSalvo())
+    vi.mocked(progressApi.deleteProgress).mockRejectedValue(new Error('sem rede'))
+    renderPlayer()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Recomeçar' }))
+
+    expect(await screen.findByText('Frase 1 de 3')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['sem progresso', null],
+    ['com a história concluída', progressoSalvo({ completed: true, segment_position: 2 })],
+    ['com o progresso no começo da primeira frase', progressoSalvo({ segment_position: 0, offset_ms: 200 })],
+  ])('%s, começa do início sem mostrar o cartão', async (_nome, salvo) => {
+    vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready', 'ready', 'ready']))
+    vi.mocked(progressApi.getProgress).mockResolvedValue(salvo)
+    const { container } = renderPlayer()
+
+    expect(await screen.findByText('Frase 1 de 3')).toBeInTheDocument()
+    expect(audioDe(container)).toHaveAttribute('src', urlDaFrase(1))
+    expect(screen.queryByRole('button', { name: 'Continuar' })).not.toBeInTheDocument()
+  })
+
+  it('se não conseguir ler o progresso, começa do início sem mostrar erro', async () => {
+    vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready']))
+    vi.mocked(progressApi.getProgress).mockRejectedValue(erroHttp(500))
+    renderPlayer()
+
+    expect(await screen.findByText('Frase 1 de 1')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('se a frase salva ainda não foi gerada, espera e toca quando ela ficar pronta', async () => {
+    vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('generating', ['ready', 'ready', 'generating']))
+    vi.mocked(playerApi.getStoryAudioStatus).mockResolvedValue(statusDe('ready', ['ready', 'ready', 'ready']))
+    vi.mocked(progressApi.getProgress).mockResolvedValue(progressoSalvo())
+    const { container } = renderPlayer()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Continuar' }))
+    expect(await screen.findByText('Gerando o áudio da próxima frase...')).toBeInTheDocument()
+
+    await act(() => vi.advanceTimersByTimeAsync(1500))
+    await vi.waitFor(() => expect(audioDe(container)).toHaveAttribute('src', urlDaFrase(3)))
+  })
+
+  it('depois de continuar, o progresso volta a ser salvo', async () => {
+    vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('ready', ['ready', 'ready', 'ready']))
+    vi.mocked(progressApi.getProgress).mockResolvedValue(progressoSalvo())
+    const { container } = renderPlayer()
+    fireEvent.click(await screen.findByRole('button', { name: 'Continuar' }))
+    await screen.findByLabelText('Reproduzir')
+    await act(async () => {})
+
+    fireEvent(audioDe(container), new Event('play'))
+    fireEvent(audioDe(container), new Event('pause'))
+
+    await vi.waitFor(() =>
+      expect(progressApi.saveProgress).toHaveBeenCalledWith(1, expect.objectContaining({ segment_position: 2 })),
+    )
+  })
+
   it('se a próxima frase ainda está sendo gerada, espera e continua quando ela fica pronta', async () => {
     vi.mocked(playerApi.requestStoryAudio).mockResolvedValue(statusDe('generating', ['ready', 'generating']))
     vi.mocked(playerApi.getStoryAudioStatus).mockResolvedValue(statusDe('generating', ['ready', 'generating']))

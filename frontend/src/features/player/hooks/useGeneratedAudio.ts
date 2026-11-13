@@ -29,12 +29,21 @@ function requestError(error: unknown) {
  * 3. Frases que falharam são puladas.
  *
  * `current` (frase atual) + o tempo do <audio> formam a posição de escuta, caso o progresso seja salvo.
+ *
+ * `startPosition` é a `position` da frase por onde começar (retomar de onde parou); sem ela, começa da primeira.
+ * `hold` segura a reprodução (não busca nenhuma URL) enquanto o usuário escolhe continuar ou recomeçar: a
+ * geração segue em andamento, só o áudio espera.
  */
-export function useGeneratedAudio(storyId: number, filterId: number | null) {
+export function useGeneratedAudio(
+  storyId: number,
+  filterId: number | null,
+  { startPosition = 0, hold = false }: { startPosition?: number; hold?: boolean } = {},
+) {
   const [status, setStatus] = useState<AudioGenerationStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // Índice (na lista ordenada) da frase que o usuário quer ouvir; as que falharam são puladas abaixo
-  const [index, setIndex] = useState(0)
+  // Índice (na lista ordenada) da frase que o usuário quer ouvir; as que falharam são puladas abaixo.
+  // Nulo: ainda não escolheu nada, vale a frase inicial (`startPosition`)
+  const [index, setIndex] = useState<number | null>(null)
   const [urls, setUrls] = useState<Record<number, string>>({})
   // Frases prontas cuja URL não pôde ser obtida: tratadas como falha
   const [broken, setBroken] = useState<ReadonlySet<number>>(new Set())
@@ -90,8 +99,11 @@ export function useGeneratedAudio(storyId: number, filterId: number | null) {
     [broken],
   )
 
+  // Frase inicial: a da posição pedida (se ela não existe mais na história, a primeira)
+  const startIndex = Math.max(0, segments.findIndex((s) => s.position >= startPosition))
+
   // Pula as frases que falharam a partir do índice pedido
-  let currentIndex = index
+  let currentIndex = index ?? startIndex
   while (currentIndex < segments.length && isSkipped(segments[currentIndex])) currentIndex += 1
   const current: SegmentAudioStatus | null = segments[currentIndex] ?? null
 
@@ -107,7 +119,7 @@ export function useGeneratedAudio(storyId: number, filterId: number | null) {
   const nextReadyId = nextReady?.segment_id ?? null
 
   useEffect(() => {
-    if (filterId === null) return
+    if (filterId === null || hold) return
     for (const segmentId of [currentReadyId, nextReadyId]) {
       if (segmentId === null || requested.current.has(segmentId)) continue
       requested.current.add(segmentId)
@@ -115,7 +127,7 @@ export function useGeneratedAudio(storyId: number, filterId: number | null) {
         .then((audio) => setUrls((prev) => ({ ...prev, [segmentId]: audio.url })))
         .catch(() => setBroken((prev) => new Set(prev).add(segmentId)))
     }
-  }, [currentReadyId, nextReadyId, filterId])
+  }, [currentReadyId, nextReadyId, filterId, hold])
 
   const src = current ? (urls[current.segment_id] ?? null) : null
   const finished = segments.length > 0 && current === null

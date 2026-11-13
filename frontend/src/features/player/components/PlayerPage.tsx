@@ -12,11 +12,13 @@ import {
 } from '../../filters/labels'
 import { PageLayout } from '../../../shared/components/PageLayout'
 import { getStoryPreview, getStorySegments, listStories } from '../../stories/api'
+import { deleteProgress, getProgress } from '../../progress/api'
 import { useProgressSaver } from '../../progress/useProgressSaver'
 import { useGeneratedAudio } from '../hooks/useGeneratedAudio'
 import { AudioPlayer } from './AudioPlayer'
 import { selectSwapIds } from '../swaps'
 import { BilingualText } from './BilingualText'
+import { ResumeCard } from './ResumeCard'
 import { DensityStrip } from './DensityStrip'
 
 export function PlayerPage() {
@@ -43,8 +45,30 @@ function PlayerPageContent() {
     enabled: filterId !== null,
     retry: false,
   })
+  // Retomar de onde parou: com progresso salvo, o usuário escolhe continuar ou recomeçar antes de tocar
+  const [choice, setChoice] = useState<'pending' | 'resume' | 'restart'>('pending')
+  const hasFilter = validStory && filterId !== null
+  const progress = useQuery({
+    queryKey: ['progress', storyId],
+    queryFn: () => getProgress(storyId),
+    enabled: hasFilter,
+    retry: false,
+    // Cada abertura do player lê o progresso de novo (ele muda a cada escuta)
+    staleTime: 0,
+    gcTime: 0,
+  })
+  const saved = progress.data && !progress.data.completed ? progress.data : null
+  // Só vale oferecer retomar se o usuário já avançou alguma coisa
+  const resumable = saved !== null && (saved.segment_position > 0 || saved.offset_ms >= 1000)
+  // Sem filtro, ou sem progresso, ou com a história concluída, ou se a consulta falhou: começa do início
+  const resolved = !hasFilter || choice !== 'pending' || progress.isError || (progress.isSuccess && !resumable)
+  const resuming = choice === 'resume' && saved !== null
+
   // Gera o áudio com o filtro e toca frase a frase, conforme cada uma fica pronta
-  const audio = useGeneratedAudio(validStory ? storyId : NaN, filterId)
+  const audio = useGeneratedAudio(validStory ? storyId : NaN, filterId, {
+    startPosition: resuming ? saved.segment_position : 0,
+    hold: !resolved,
+  })
 
   // Progresso: a posição é salva sozinha (a cada 5 s, ao pausar e ao sair); o usuário não percebe
   const [playing, setPlaying] = useState(false)
@@ -61,7 +85,7 @@ function PlayerPageContent() {
   const { markCompleted } = useProgressSaver({
     storyId,
     filterId,
-    enabled: validStory && filterId !== null,
+    enabled: hasFilter && resolved, // antes da escolha, salvar apagaria o progresso antigo
     playing,
     getPosition: () =>
       currentPosition === null ? null : { segmentPosition: currentPosition, offsetMs: offsetMs.current },
@@ -112,7 +136,15 @@ function PlayerPageContent() {
 
   const status = audio.status
   // O player aparece assim que existe alguma frase pronta (ou já pulada): não espera a história toda
-  const showPlayer = !audioError && status !== null && (audio.src !== null || audio.currentIndex > 0 || audio.finished)
+  const showPlayer =
+    resolved && !audioError && status !== null && (audio.src !== null || audio.currentIndex > 0 || audio.finished)
+  const showResume = hasFilter && !resolved && progress.isSuccess && resumable && !audioError
+
+  function restart() {
+    setChoice('restart')
+    // O progresso antigo deixa de valer; se não for possível apagar, o salvamento seguinte o substitui
+    deleteProgress(storyId).catch(() => undefined)
+  }
 
   let subtitle: string | undefined
   if (status) {
@@ -155,6 +187,15 @@ function PlayerPageContent() {
             Escolher filtro
           </Link>
         </div>
+      ) : showResume && saved ? (
+        <ResumeCard
+          title={title}
+          segmentPosition={saved.segment_position}
+          offsetMs={saved.offset_ms}
+          total={segments.data?.segments.length ?? status?.total ?? null}
+          onContinue={() => setChoice('resume')}
+          onRestart={restart}
+        />
       ) : showPlayer ? (
         <>
           <AudioPlayer
@@ -168,6 +209,7 @@ function PlayerPageContent() {
             notice={notice}
             onPlayingChange={setPlaying}
             onTick={onTick}
+            startAt={resuming && audio.current?.position === saved.segment_position ? saved.offset_ms / 1000 : undefined}
           />
           {increasing && preview.data && (
             <DensityStrip

@@ -21,6 +21,8 @@ interface AudioPlayerProps {
   // Quem usa o player acompanha se está tocando e o ponto da faixa (ex.: para salvar o progresso)
   onPlayingChange?: (playing: boolean) => void
   onTick?: (seconds: number) => void
+  // Ponto (em segundos) onde a faixa começa, ao retomar de onde parou; vale para a faixa atual
+  startAt?: number
 }
 
 const formatSpeed = (value: number) => `${String(value).replace('.', ',')}x`
@@ -36,6 +38,7 @@ export function AudioPlayer({
   notice,
   onPlayingChange,
   onTick,
+  startAt,
 }: AudioPlayerProps) {
   const {
     audioRef,
@@ -57,6 +60,18 @@ export function AudioPlayer({
   useEffect(() => {
     onTick?.(currentTime)
   }, [currentTime, onTick])
+
+  // Retomar: pula para o ponto salvo assim que a faixa tem duração (ou já, se ela já carregou)
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio || !src || !startAt) return
+    const apply = () => {
+      audio.currentTime = Math.min(startAt, audio.duration || startAt)
+    }
+    if (audio.readyState >= 1) apply()
+    else audio.addEventListener('loadedmetadata', apply, { once: true })
+    return () => audio.removeEventListener('loadedmetadata', apply)
+  }, [audioRef, src, startAt])
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
 
