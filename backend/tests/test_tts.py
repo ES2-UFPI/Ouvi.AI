@@ -256,7 +256,8 @@ def test_provedor_desconhecido_derruba_a_subida_da_api(sem_cache_do_tts, monkeyp
             pass
 
 
-def test_get_tts_provider_funciona_como_dependencia_e_aceita_override():
+def test_get_tts_provider_funciona_como_dependencia_e_aceita_override(sem_cache_do_tts, monkeypatch):
+    monkeypatch.setenv("TTS_PROVIDER", "fake")  # o backend/.env de quem tem o Azure ligado não pode mudar o teste
     app = FastAPI()
 
     @app.get("/nome")
