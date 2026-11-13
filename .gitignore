@@ -23,3 +23,6 @@ dist/
 .idea/
 *.DS_Store
 Thumbs.db
+
+# Áudios da prova de conceito do TTS (scripts/poc_tts.py)
+backend/poc-tts-audios/

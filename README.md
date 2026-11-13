@@ -383,10 +383,10 @@ no resto do sistema. Nenhum módulo fala direto com o fornecedor.
 
 | Variável (`backend/.env`) | Para que serve |
 |---|---|
-| `TTS_PROVIDER` | `fake` (padrão): gera tons, sem rede e sem chave. Um valor desconhecido **derruba a API na subida**, com a lista dos que existem |
+| `TTS_PROVIDER` | `fake` (padrão): gera tons, sem rede e sem chave. `azure`: voz real do Azure Speech. Um valor desconhecido **derruba a API na subida**, com a lista dos que existem |
 | `TTS_API_KEY` | chave do fornecedor real (o provedor falso ignora). Nunca vai para o repositório |
-| `TTS_REGION` | região do serviço do fornecedor real |
-| `TTS_VOICE_ID` | voz usada na síntese |
+| `TTS_REGION` | região do serviço do fornecedor real (no Azure, ex.: `brazilsouth`, `eastus`) |
+| `TTS_VOICE_ID` | voz usada na síntese (no Azure, o nome da voz, ex.: `pt-BR-ThalitaMultilingualNeural`) |
 
 Um clone novo sobe com `TTS_PROVIDER=fake`, sem nenhuma chave.
 
@@ -409,6 +409,45 @@ fake.calls             # [FakeCall(ssml=..., voice_id="qualquer-voz")]
 
 Nos testes, troque o provedor com `app.dependency_overrides[get_tts_provider] = lambda: FakeTTSProvider()`.
 Um erro de síntese é um `TTSError`, com `retryable` dizendo se vale tentar de novo.
+
+### TTS real (Azure Speech)
+
+O `AzureTTSAdapter` (`app/integrations/tts/azure.py`) chama a API REST do Azure Speech com `httpx` e devolve um MP3
+(24 kHz, 48 kbit/s, mono). A troca de idioma é feita pelo próprio SSML: o trecho em `<lang xml:lang="en-US">` é falado
+em inglês **com a mesma voz**, desde que a voz seja *multilíngue* (com `Multilingual` no nome). O adaptador põe a voz
+no SSML (`<voice name="...">`), então o compositor não precisa saber qual é.
+
+1. No [portal do Azure](https://portal.azure.com), crie um recurso **Speech** (o plano gratuito F0 serve; com o
+   Azure for Students não precisa de cartão).
+2. Em **Chaves e ponto de extremidade**, copie a **Chave 1** e a **Região**.
+3. No `backend/.env` (que não vai para o repositório):
+
+   ```
+   TTS_PROVIDER=azure
+   TTS_API_KEY=<a chave>
+   TTS_REGION=<a região, ex.: brazilsouth>
+   TTS_VOICE_ID=pt-BR-ThalitaMultilingualNeural
+   ```
+
+4. Reinicie a API. Sem `TTS_API_KEY` ou `TTS_REGION`, ou com a voz do provedor falso (`fake-voice`), a API não sobe
+   e diz qual variável falta.
+
+**Trocar a voz** é só mudar `TTS_VOICE_ID`, sem mexer em código. Candidatas multilíngues: `pt-BR-ThalitaMultilingualNeural`,
+`en-US-AvaMultilingualNeural` e `en-US-AndrewMultilingualNeural` (a lista completa está na
+[documentação do Azure](https://learn.microsoft.com/azure/ai-services/speech-service/language-support?tabs=tts)).
+A comparação entre elas e a voz escolhida estão em [`docs/poc-tts.md`](docs/poc-tts.md).
+
+**Erros e novas tentativas.** Respostas `429` e `5xx`, tempo esgotado (10 s) e falhas de rede são tentados de novo
+até 3 vezes, com espera crescente (0,5 s, 1 s, 2 s, ou o `Retry-After` do Azure); depois vem um
+`TTSError(retryable=True)`. `400` (SSML recusado) e `401`/`403` (chave) levantam `TTSError(retryable=False)` na hora.
+A chave nunca aparece em mensagens de erro, logs nem no `repr` do adaptador.
+
+**Teste com o Azure de verdade.** Os testes normais simulam o Azure e rodam sem rede. O teste manual sintetiza uma
+frase com troca de idioma, confere a duração e salva o MP3 para ouvir. Ele só roda com a chave no `backend/.env`
+(sem ela, aparece como pulado). Na pasta `backend`:
+
+```
+.\venv\Scripts\python.exe -m pytest -m tts_real -s
 
 ## Composição do áudio (AudioComposer)
 
