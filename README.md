@@ -328,6 +328,24 @@ Resposta do `POST` e do `status`:
 em falha; um novo `POST` tenta de novo só as que falharam). `status` de cada frase: `pending`, `generating`, `ready`
 ou `failed`.
 
+### Pré-gerar o áudio de todas as histórias (demonstração)
+
+Para a primeira escuta de qualquer pessoa, com qualquer filtro, já encontrar tudo pronto (sem esperar a síntese),
+um comando gera o áudio de **todas as histórias em todos os casos** e monta o áudio único de cada combinação:
+
+```bash
+docker compose exec api python -m app.modules.audio.pregenerate --dry-run   # só lista as combinações (nada é gasto)
+docker compose exec api python -m app.modules.audio.pregenerate             # gera tudo
+docker compose exec api python -m app.modules.audio.pregenerate --story-id 1 --scenario C --density high
+```
+
+As combinações são as aceitas pela API (`SCENARIOS`): o **Cenário A** (phrasal verbs), o **B** (palavras difíceis, nos
+níveis intermediário e avançado) e o **C** (vocabulário avançado, densidade crescente), cada um nas três densidades:
+12 por história. As frases iguais entre combinações vêm do cache, então o custo real de TTS é bem menor que o número de
+combinações, e rodar de novo não refaz o que já está pronto. Usa o provedor e as vozes do ambiente (`TTS_PROVIDER`,
+`TTS_VOICE_ID`, `TTS_VOICE_ID_PT/EN`). Sai com código 1 se alguma frase falhar. Se o texto de uma história mudar,
+apague antes os `audio_assets` dela (veja o aviso em "Palavras difíceis e Cenário B").
+
 ## Cache de áudio (US08)
 
 O TTS cobra por caractere, então o mesmo conteúdo é sintetizado **uma única vez**, para qualquer filtro e
