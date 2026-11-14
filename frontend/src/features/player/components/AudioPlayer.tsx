@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Headphones, Play, Pause } from 'lucide-react'
 import { SPEEDS, useAudioPlayer } from '../hooks/useAudioPlayer'
 import { formatTime } from '../formatTime'
@@ -17,6 +18,13 @@ interface AudioPlayerProps {
   waitingMessage?: string | null
   // Aviso discreto (ex.: frases puladas)
   notice?: string | null
+  // Quem usa o player acompanha se está tocando e o ponto da faixa (ex.: para salvar o progresso)
+  onPlayingChange?: (playing: boolean) => void
+  onTick?: (seconds: number) => void
+  // Ponto (em segundos) onde a faixa começa, ao retomar de onde parou; vale para a faixa atual
+  startAt?: number
+  // Pede para pular para um ponto da faixa (e, se `play`, tocar). Cada pedido é um objeto novo
+  seekRequest?: { time: number; play?: boolean } | null
 }
 
 const formatSpeed = (value: number) => `${String(value).replace('.', ',')}x`
@@ -30,6 +38,10 @@ export function AudioPlayer({
   subtitle,
   waitingMessage,
   notice,
+  onPlayingChange,
+  onTick,
+  startAt,
+  seekRequest,
 }: AudioPlayerProps) {
   const {
     audioRef,
@@ -44,6 +56,33 @@ export function AudioPlayer({
     seekTo,
     setSpeed,
   } = useAudioPlayer()
+
+  useEffect(() => {
+    onPlayingChange?.(isPlaying)
+  }, [isPlaying, onPlayingChange])
+  useEffect(() => {
+    onTick?.(currentTime)
+  }, [currentTime, onTick])
+
+  // Retomar: pula para o ponto salvo assim que a faixa tem duração (ou já, se ela já carregou)
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio || !src || !startAt) return
+    const apply = () => {
+      audio.currentTime = Math.min(startAt, audio.duration || startAt)
+    }
+    if (audio.readyState >= 1) apply()
+    else audio.addEventListener('loadedmetadata', apply, { once: true })
+    return () => audio.removeEventListener('loadedmetadata', apply)
+  }, [audioRef, src, startAt])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio || !seekRequest) return
+    audio.currentTime = seekRequest.time
+    // play() devolve uma promessa nos navegadores atuais; o Promise.resolve cobre os que não devolvem
+    if (seekRequest.play) void Promise.resolve(audio.play()).catch(() => undefined)
+  }, [audioRef, seekRequest])
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
 

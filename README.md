@@ -175,8 +175,14 @@ No Cenário B o idioma base é o inglês e as **palavras difíceis** são falada
 - **Filtro**: `{"base_language": "en", "segment_types": ["difficult_words"], "word_level": "intermediate", "density": "medium"}`.
   As combinações permitidas estão em `SCENARIOS` (`modules/filters/schemas.py`) e em `GET /filters/options`.
   `intermediate` troca as palavras dos dois níveis; `advanced`, só as raras.
-- Hoje o seed tem 40 candidatas, todas com equivalente (Lebre: 17, Patinho: 14, Raposa: 9); 2 são descartadas na
-  anotação por estarem dentro de phrasal verbs, ficando 38. A Raposa é curta demais para a meta de 15 por história.
+- Hoje o seed tem 80 candidatas, todas com equivalente (Lebre: 27, Patinho: 27, Raposa: 26), das quais 55 são de
+  nível avançado, o que alimenta o Cenário C (Lebre: 18, Patinho: 20, Raposa: 17). Algumas são descartadas na anotação
+  por estarem dentro de phrasal verbs. O vocabulário avançado foi enriquecido de propósito (antes a Raposa tinha 0 palavras
+  avançadas e as outras repetiam a mesma, *tortoise* e *duckling*): para trocar o texto de uma história, edite o JSON
+  do seed, acrescente as formas em português em `nlp/data/pt_words.json`, rode `candidates --level advanced` para
+  conferir e depois `seed` e `annotate`.
+  **Atenção:** áudios já gerados de uma frase cujo texto mudou continuam `ready` com o áudio antigo; apague os
+  `audio_assets` da história (ou recomece com `docker compose down -v`) para gerar de novo.
 
 ## Trechos candidatos pela API
 
@@ -313,6 +319,7 @@ Todas as rotas exigem token; filtro inexistente ou de outro usuário responde `4
 | `POST /stories/{story_id}/audio` com `{"filter_id": 3}` | dispara a geração em segundo plano e responde `202` com o status. Durante a geração não dispara outra (`202`); com tudo pronto responde `200` |
 | `GET /stories/{story_id}/audio/status?filter_id=3` | progresso, para o front consultar por polling |
 | `GET /audio/segments/{segment_id}?filter_id=3` | URL assinada do áudio da frase; `409` se ainda não está pronto ou se falhou |
+| `GET /stories/{story_id}/audio/full?filter_id=3` | **áudio único** da história: URL assinada de um arquivo só com todas as frases, a duração total e onde cada frase começa (`start_ms`); `409` se alguma frase ainda não terminou. As frases que falharam ficam de fora (`skipped`) |
 
 Resposta do `POST` e do `status`:
 
@@ -326,6 +333,24 @@ Resposta do `POST` e do `status`:
 `state` é `pending` (nada em andamento), `generating`, `ready` (todas prontas) ou `failed` (terminou com alguma frase
 em falha; um novo `POST` tenta de novo só as que falharam). `status` de cada frase: `pending`, `generating`, `ready`
 ou `failed`.
+
+### Pré-gerar o áudio de todas as histórias (demonstração)
+
+Para a primeira escuta de qualquer pessoa, com qualquer filtro, já encontrar tudo pronto (sem esperar a síntese),
+um comando gera o áudio de **todas as histórias em todos os casos** e monta o áudio único de cada combinação:
+
+```bash
+docker compose exec api python -m app.modules.audio.pregenerate --dry-run   # só lista as combinações (nada é gasto)
+docker compose exec api python -m app.modules.audio.pregenerate             # gera tudo
+docker compose exec api python -m app.modules.audio.pregenerate --story-id 1 --scenario C --density high
+```
+
+As combinações são as aceitas pela API (`SCENARIOS`): o **Cenário A** (phrasal verbs), o **B** (palavras difíceis, nos
+níveis intermediário e avançado) e o **C** (vocabulário avançado, densidade crescente), cada um nas três densidades:
+12 por história. As frases iguais entre combinações vêm do cache, então o custo real de TTS é bem menor que o número de
+combinações, e rodar de novo não refaz o que já está pronto. Usa o provedor e as vozes do ambiente (`TTS_PROVIDER`,
+`TTS_VOICE_ID`, `TTS_VOICE_ID_PT/EN`). Sai com código 1 se alguma frase falhar. Se o texto de uma história mudar,
+apague antes os `audio_assets` dela (veja o aviso em "Palavras difíceis e Cenário B").
 
 ## Cache de áudio (US08)
 
@@ -532,15 +557,29 @@ seleção por conta própria: ela usa o mesmo `AudioComposer` da geração de á
 
 O contrato completo está no `/docs` (Swagger), com os schemas `PreviewRead` e `SwapRead`.
 
-## Filtro de Audição e player (front)
+## Telas do front: início, filtro e player
 
-1. Em `/filter`, escolha a história, o idioma base, o tipo de trecho e a densidade, e clique em **Salvar filtro**.
+O caminho do usuário é **login → tela inicial → filtro → player**:
+
+1. **Tela inicial (`/`)**, onde o login cai: saudação com o seu nome, a seção **Continuar ouvindo** (até 5 histórias
+   em andamento, com barra de progresso e "frase 7 de 12"), a lista de **Histórias** e o botão **Sair**. **Continuar**
+   abre o player com o filtro que você estava usando; **Ouvir** abre o filtro com aquela história já escolhida.
+2. **Filtro (`/filter?story=<id>`)**: escolha o idioma base, o tipo de trecho e a densidade, e clique em **Salvar filtro**.
    O botão fica desativado até haver idioma base e pelo menos um tipo de trecho. O filtro é gravado em `/filters`,
-   vinculado ao seu usuário, e reaparece preenchido ao reabrir a tela (um filtro por história).
-2. Com o filtro salvo, **Ouvir** leva a `/player/<história>?filter=<id>`. O player pede a URL assinada em
-   `GET /audio/url` e toca com a tag `<audio>`: pular na barra usa HTTP Range. Há play/pausa, voltar e avançar 15 s,
-   velocidades de 0,75x a 2x (sem mudar o tom da voz), tempo atual e duração, indicador de carregamento e mensagem
-   de erro.
+   vinculado ao seu usuário, e reaparece preenchido ao reabrir a tela (um filtro por história). **Início** volta à tela inicial.
+3. **Player (`/player/<história>?filter=<id>`)**: com o filtro salvo, **Ouvir** gera o áudio (em segundo plano, frase a
+   frase). Enquanto gera, começa a tocar assim que a primeira frase fica pronta; quando a geração termina, a
+   história passa a tocar num **áudio único e contínuo**, com uma barra de progresso para a história toda: dá para
+   voltar até qualquer palavra arrastando a barra, com o −15 s ou pelo botão ▶ ao lado de cada frase no texto (ou
+   pelas colunas da faixa de densidade). Há ainda play/pausa, velocidades de 0,75x a 2x (sem mudar o tom da voz), a
+   frase tocando destacada no texto e os trechos trocados marcados. Se o áudio único não puder ser montado, o
+   player segue frase a frase.
+
+**Retomar de onde parou.** O player guarda a posição sozinho, sem o usuário perceber: a cada 5 s enquanto toca, ao
+pausar e ao fechar ou esconder a página (`PUT /stories/{id}/progress`); uma falha de rede é ignorada e a posição vai no
+ciclo seguinte. Ao abrir uma história já começada, um cartão pergunta **Continuar** (volta à frase e ao ponto salvos) ou
+**Recomeçar** (apaga o progresso). Ao terminar a história, ela é marcada como concluída e sai de "Continuar ouvindo".
+Como o progresso fica no servidor, funciona em outro navegador, logado na mesma conta.
 
 ## Testes e integração contínua
 

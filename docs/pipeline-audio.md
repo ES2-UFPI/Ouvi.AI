@@ -110,6 +110,23 @@ Mesma resposta do `POST`, para o front consultar por polling. `state`: `pending`
 
 `409` se o áudio da frase ainda não está pronto ou se a geração dele falhou.
 
+### `GET /stories/{story_id}/audio/full?filter_id=3`
+
+O **áudio único** da história: todas as frases prontas num arquivo só, para o player tocar de uma vez e
+voltar a qualquer palavra. O arquivo é montado na primeira chamada (MP3 de taxa constante: os quadros são
+colados em ordem; WAV: cabeçalho novo) e guardado no armazenamento com o hash das chaves das frases, então é
+reaproveitado enquanto nenhuma frase mudar.
+
+```json
+{"url": "http://localhost:8000/audio/stream?key=full%2F5fe98e....mp3&expires=1790000000&signature=...",
+ "expires_at": "2026-11-12T15:00:00Z", "duration_ms": 53424, "format": "mp3", "skipped": [],
+ "segments": [{"segment_id": 7, "position": 0, "start_ms": 0, "duration_ms": 4680},
+              {"segment_id": 8, "position": 1, "start_ms": 4680, "duration_ms": 4944}]}
+```
+
+`409` se alguma frase ainda não terminou de ser gerada ou se nenhuma ficou pronta. As frases que falharam ficam
+de fora do arquivo e vêm em `skipped` (sem buraco na linha do tempo). A URL é a do `GET /audio/stream`, com Range.
+
 ### `GET /audio/stream?key=...&expires=...&signature=...`
 
 Sem token (a tag `<audio>` não envia `Authorization`): o acesso é garantido pela assinatura. Aceita `Range`

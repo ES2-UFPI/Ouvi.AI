@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { Play } from 'lucide-react'
 import type { BaseLanguage } from '../../filters/api'
 import type { StorySegment } from '../../stories/api'
 import { buildParts } from '../buildParts'
@@ -9,11 +10,19 @@ interface BilingualTextProps {
   swapIds: ReadonlySet<number>
   // Frase que está tocando agora: ganha destaque e é rolada para a vista
   activeSegmentId?: number | null
+  // Com isto, cada frase ganha um botão para ouvir a partir dela (voltar até uma palavra)
+  onSelectSegment?: (segmentId: number) => void
 }
 
 const LANGUAGE_NAMES: Record<BaseLanguage, string> = { pt: 'português', en: 'inglês' }
 
-export function BilingualText({ segments, baseLanguage, swapIds, activeSegmentId = null }: BilingualTextProps) {
+export function BilingualText({
+  segments,
+  baseLanguage,
+  swapIds,
+  activeSegmentId = null,
+  onSelectSegment,
+}: BilingualTextProps) {
   const activeRef = useRef<HTMLParagraphElement | null>(null)
 
   useEffect(() => {
@@ -45,7 +54,7 @@ export function BilingualText({ segments, baseLanguage, swapIds, activeSegmentId
         Trechos falados em {LANGUAGE_NAMES[swappedLanguage]}
       </p>
       <div lang={baseLanguage} className="max-h-80 overflow-y-auto pr-2 space-y-3 text-text-primary leading-relaxed">
-        {segments.map((segment) => (
+        {segments.map((segment, index) => (
           <p
             key={segment.id}
             ref={segment.id === activeSegmentId ? activeRef : undefined}
@@ -57,6 +66,16 @@ export function BilingualText({ segments, baseLanguage, swapIds, activeSegmentId
                 : undefined
             }
           >
+            {onSelectSegment && (
+              <button
+                type="button"
+                onClick={() => onSelectSegment(segment.id)}
+                aria-label={`Ouvir a partir da frase ${index + 1}`}
+                className="inline-flex items-center justify-center w-5 h-5 mr-1.5 align-middle rounded-full text-text-muted hover:text-text-primary focus-visible:ring-2 focus-visible:ring-accent-en transition-colors"
+              >
+                <Play size={11} fill="currentColor" aria-hidden="true" />
+              </button>
+            )}
             {buildParts(segment, baseLanguage, swapIds).map((part, i) =>
               part.swapped ? (
                 <mark

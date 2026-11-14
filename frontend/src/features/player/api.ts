@@ -52,3 +52,30 @@ export async function getSegmentAudio(segmentId: number, filterId: number) {
   })
   return data
 }
+
+// Onde cada frase fica no áudio único da história, em milissegundos desde o começo
+export interface TrackSegment {
+  segment_id: number
+  position: number
+  start_ms: number
+  duration_ms: number
+}
+
+export interface FullAudio {
+  url: string
+  expires_at: string
+  duration_ms: number
+  format: string
+  segments: TrackSegment[]
+  // Frases que falharam e ficaram de fora do áudio
+  skipped: number[]
+}
+
+// Áudio único da história (todas as frases juntas), para tocar de uma vez e voltar a qualquer palavra.
+// 409 = alguma frase ainda não terminou de ser gerada
+export async function getFullAudio(storyId: number, filterId: number) {
+  const { data } = await apiClient.get<FullAudio>(`/stories/${storyId}/audio/full`, {
+    params: { filter_id: filterId },
+  })
+  return data
+}

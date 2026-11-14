@@ -71,8 +71,10 @@ def salvar(repo, usuario, historia, frase=2, offset=1500, quando=AGORA, **kwargs
     )
 
 
-def total(db_session) -> int:
-    return db_session.scalar(select(func.count()).select_from(PlaybackProgress))
+def total(db_session, story_id: int) -> int:
+    """Progressos DESTA história: o banco de desenvolvimento pode ter outros, de uso real."""
+    stmt = select(func.count()).select_from(PlaybackProgress).where(PlaybackProgress.story_id == story_id)
+    return db_session.scalar(stmt)
 
 
 # ---------- upsert ----------
@@ -97,13 +99,13 @@ def test_gravar_de_novo_atualiza_o_mesmo_registro(repo, usuario, historia, db_se
 
     assert primeiro.id == segundo.id
     assert (segundo.segment_position, segundo.offset_ms) == (3, 700)
-    assert total(db_session) == 1
+    assert total(db_session, historia.id) == 1
 
 
 def test_gravar_a_mesma_posicao_varias_vezes_nao_duplica(repo, usuario, historia, db_session):
     for _ in range(5):
         salvar(repo, usuario, historia)
-    assert total(db_session) == 1
+    assert total(db_session, historia.id) == 1
 
 
 def test_marcar_como_concluida(repo, usuario, historia):
@@ -188,14 +190,15 @@ def test_apagar_o_usuario_apaga_o_progresso(repo, usuario, historia, db_session)
     salvar(repo, usuario, historia)
     db_session.execute(text("DELETE FROM users WHERE id = :id"), {"id": usuario.id})
     db_session.commit()
-    assert total(db_session) == 0
+    assert total(db_session, historia.id) == 0
 
 
 def test_apagar_a_historia_apaga_o_progresso(repo, usuario, historia, db_session):
     salvar(repo, usuario, historia)
-    db_session.execute(text("DELETE FROM stories WHERE id = :id"), {"id": historia.id})
+    story_id = historia.id
+    db_session.execute(text("DELETE FROM stories WHERE id = :id"), {"id": story_id})
     db_session.commit()
-    assert total(db_session) == 0
+    assert total(db_session, story_id) == 0
 
 
 def test_apagar_o_filtro_mantem_o_progresso_sem_filtro(repo, usuario, historia, filtro, db_session):

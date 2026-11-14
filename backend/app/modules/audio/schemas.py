@@ -42,6 +42,24 @@ class AudioGenerationStatusRead(BaseModel):
     segments: list[SegmentAudioStatusRead] = Field(description="Estado de cada frase, em ordem de posição")
 
 
+class TrackSegmentRead(BaseModel):
+    """Onde uma frase fica no áudio único, em milissegundos desde o começo."""
+
+    segment_id: int
+    position: int
+    start_ms: int
+    duration_ms: int
+
+
+class FullAudioRead(AudioUrlRead):
+    """URL assinada do áudio único da história e a linha do tempo de cada frase nele."""
+
+    duration_ms: int
+    format: str = Field(description="wav ou mp3")
+    segments: list[TrackSegmentRead] = Field(description="Frases no áudio, em ordem, com o início e a duração")
+    skipped: list[int] = Field(description="segment_id das frases que falharam e ficaram de fora do áudio")
+
+
 class SegmentAudioRead(AudioUrlRead):
     """URL assinada do áudio de uma frase: vai direto no `src` do `<audio>` (com suporte a Range)."""
 

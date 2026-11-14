@@ -47,6 +47,10 @@ class SegmentAudioFailedError(Exception):
     """A geração do áudio da frase falhou."""
 
 
+class StoryAudioNotReadyError(Exception):
+    """O áudio único da história ainda não pode ser montado: alguma frase não terminou ou nenhuma ficou pronta."""
+
+
 class GenerationJobs:
     """Gerações em andamento NESTE processo, por (história, regras, voz).
 
@@ -85,6 +89,15 @@ class SegmentStatus:
     status: str
     duration_ms: int | None
     error: str | None
+
+
+@dataclass(frozen=True)
+class FullTrackParts:
+    """O que compõe o áudio único: as frases prontas, em ordem, e as que ficaram de fora (falharam)."""
+
+    assets: list[AudioAsset]
+    positions: dict[int, int]  # segment_id -> posição da frase
+    skipped: list[int]  # segment_id das frases que falharam
 
 
 @dataclass(frozen=True)
@@ -169,6 +182,33 @@ class AudioGenerationService:
         if asset.status == STATUS_FAILED:
             raise SegmentAudioFailedError(asset.error or "")
         return asset
+
+    def full_track_parts(self, user: User, story_id: int, filter_id: int) -> FullTrackParts:
+        """Frases prontas da história com o filtro, para montar o áudio único. Todas precisam ter terminado
+        (prontas ou falhas): frases ainda em geração levantam StoryAudioNotReadyError, e frases que falharam
+        ficam de fora. Levanta também as exceções de `status`."""
+        listening_filter = self._filter_for_story(user, story_id, filter_id)
+        rules = self._rules(listening_filter)
+        _, segments = self.stories.get_segments(story_id)
+        by_segment = {
+            a.segment_id: a
+            for a in self.assets.list_by_story(
+                story_id, rules_hash=compute_rules_hash(rules), voice_id=self.voice_for(rules)
+            )
+        }
+        ready: list[AudioAsset] = []
+        skipped: list[int] = []
+        for segment in segments:
+            asset = by_segment.get(segment.id)
+            if asset is None or asset.status in (STATUS_PENDING, STATUS_GENERATING):
+                raise StoryAudioNotReadyError()
+            if asset.status == STATUS_FAILED:
+                skipped.append(segment.id)
+            else:
+                ready.append(asset)
+        if not ready:
+            raise StoryAudioNotReadyError()
+        return FullTrackParts(ready, {s.id: s.position for s in segments}, skipped)
 
     # ---------- auxiliares ----------
 

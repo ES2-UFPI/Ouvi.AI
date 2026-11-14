@@ -5,6 +5,7 @@ import { PageLayout } from '../shared/components/PageLayout'
 import { ProtectedRoute } from '../shared/components/ProtectedRoute'
 import { AudioFilterPanel } from '../features/filters/components/AudioFilterPanel'
 import { PlayerPage } from '../features/player/components/PlayerPage'
+import { HomePage } from '../features/home/components/HomePage'
 import { DevNav } from '../test/DevNav'
 
 export function AppRoutes() {
@@ -16,7 +17,7 @@ export function AppRoutes() {
       <Route path="/cadastro" element={<RegisterForm />} />
 
       <Route element={<ProtectedRoute />}>
-        <Route path="/" element={<div>Dashboard (em construção)</div>} />
+        <Route path="/" element={<HomePage />} />
 
         <Route
           path="/filter"

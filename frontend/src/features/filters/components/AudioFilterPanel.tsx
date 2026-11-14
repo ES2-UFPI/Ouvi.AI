@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import axios from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { ChevronDown, Headphones, SlidersHorizontal } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, ChevronDown, Headphones, SlidersHorizontal } from 'lucide-react'
 import { getStoryPreview, listStories, type StoryPreview } from '../../stories/api'
 import {
   createFilter,
@@ -157,7 +157,12 @@ function ExampleSentence({ segment }: { segment: StoryPreview['segments'][number
 
 export function AudioFilterPanel() {
   const queryClient = useQueryClient()
-  const [selectedStory, setSelectedStory] = useState<number | null>(null)
+  // Vindo da tela inicial (`/filter?story=3`), a história já chega escolhida
+  const [searchParams] = useSearchParams()
+  const storyParam = Number(searchParams.get('story'))
+  const [selectedStory, setSelectedStory] = useState<number | null>(
+    Number.isInteger(storyParam) && storyParam > 0 ? storyParam : null,
+  )
   // Só guarda o que o usuário mexeu; sem edição, o formulário mostra o filtro salvo
   const [draft, setDraft] = useState<FormValues | null>(null)
 
@@ -273,6 +278,13 @@ export function AudioFilterPanel() {
       onSubmit={handleSubmit}
       className="rounded-2xl bg-bg-surface border border-border-subtle p-7 shadow-2xl shadow-black/40"
     >
+      <Link
+        to="/"
+        className="inline-flex items-center gap-1.5 text-text-muted hover:text-text-primary transition-colors text-sm mb-5"
+      >
+        <ArrowLeft size={16} aria-hidden="true" />
+        Início
+      </Link>
       <div className="flex items-center gap-3 mb-1">
         <span
           className="w-10 h-10 rounded-xl flex items-center justify-center"

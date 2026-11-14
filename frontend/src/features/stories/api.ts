@@ -5,6 +5,8 @@ export interface Story {
   id: number
   title: string
   description: string | null
+  // Número de frases da história
+  segment_count: number
 }
 
 export interface StoryAnnotation {
