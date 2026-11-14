@@ -1,5 +1,7 @@
 # Ouvi.AI
 
+[![CI](https://github.com/ES2-UFPI/Ouvi.AI/actions/workflows/ci.yml/badge.svg)](https://github.com/ES2-UFPI/Ouvi.AI/actions/workflows/ci.yml)
+
 Plataforma de streaming de áudio para aprendizado de idiomas, com alternância
 fluida entre Português e Inglês na mesma faixa, mantendo a mesma voz do
 narrador.
@@ -15,7 +17,7 @@ narrador.
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado e aberto
 - Git
-- [Node.js](https://nodejs.org/) 20 ou mais novo, para rodar o frontend
+- [Node.js](https://nodejs.org/) 22.12 ou mais novo (recomendado: 24), para rodar o frontend e os testes dele (o Vitest 5 não funciona com o Node 20)
 
 O backend, o banco e o MinIO rodam dentro do Docker, sem precisar instalar
 Python. O frontend roda na sua máquina, com `npm run dev`.
@@ -28,7 +30,8 @@ git clone https://github.com/ES2-UFPI/Ouvi.AI.git
 cd Ouvi.AI
 ```
 
-2. Copie os arquivos de variáveis de ambiente de exemplo:
+2. Copie os arquivos de variáveis de ambiente de exemplo (opcional para desenvolvimento: sem o `.env` da raiz,
+   o `docker-compose.yml` usa os mesmos valores do `.env.example`, então `docker compose up` funciona logo após o clone):
 ```bash
 cp .env.example .env
 cp backend/.env.example backend/.env
@@ -150,6 +153,37 @@ Cada entrada liga um phrasal verb às formas dele em português:
 - Trecho sem entrada no dicionário não se perde: fica gravado com os campos `pt_*` nulos e aparece no relatório do
   comando de anotação. Acrescente as formas e rode o comando de novo.
 
+## Palavras difíceis e Cenário B (US10)
+
+No Cenário B o idioma base é o inglês e as **palavras difíceis** são faladas em português pela mesma voz.
+
+- **Detector** (`nlp/difficult_words.py`, tipo `difficult_word` na `DetectorFactory`): substantivos, verbos,
+  adjetivos e advérbios cuja frequência no inglês (escala Zipf, a maior entre a forma e o lema) é menor que 4,0.
+  Nomes próprios, números e palavras vazias nunca entram. Nível `advanced` se Zipf < 3,4, senão `intermediate`.
+  Listas de exceção: `nlp/data/difficult_words_exclude.txt` (nunca entram) e `difficult_words_include.txt` (sempre).
+- **Frequências** (`nlp/data/en_word_frequency.txt`, ~400 KB, 28 mil palavras com Zipf ≥ 3; ausentes = raras):
+  geradas uma vez da biblioteca [wordfreq](https://github.com/rspeer/wordfreq) por
+  `python -m scripts.build_word_frequency`. A wordfreq **não** entra no `requirements.txt` (o pacote tem ~56 MB);
+  a imagem cresce só ~0,4 MB. Dados sob CC BY-SA 4.0 (Robyn Speer / Luminoso).
+- **Dicionário** (`nlp/data/pt_words.json`): lema de uma palavra → formas em português, mesmo formato de
+  `pt_equivalents.json`. As chaves não podem colidir com as dos phrasal verbs.
+- **Candidatos por história** (para revisar o dicionário): `python -m app.modules.stories.candidates [--level advanced]`.
+- **Anotação por tipo**: `python -m app.modules.stories.annotate --kind difficult_word` refaz só as palavras difíceis,
+  sem tocar nos phrasal verbs (e vice-versa). Sem `--kind`, todos os tipos. Na sobreposição o phrasal verb vence
+  (*dozed off* não gera a palavra *dozed*), e o relatório mostra, por tipo, detectados, alinhados, sem equivalente e
+  descartados.
+- **Filtro**: `{"base_language": "en", "segment_types": ["difficult_words"], "word_level": "intermediate", "density": "medium"}`.
+  As combinações permitidas estão em `SCENARIOS` (`modules/filters/schemas.py`) e em `GET /filters/options`.
+  `intermediate` troca as palavras dos dois níveis; `advanced`, só as raras.
+- Hoje o seed tem 80 candidatas, todas com equivalente (Lebre: 27, Patinho: 27, Raposa: 26), das quais 55 são de
+  nível avançado, o que alimenta o Cenário C (Lebre: 18, Patinho: 20, Raposa: 17). Algumas são descartadas na anotação
+  por estarem dentro de phrasal verbs. O vocabulário avançado foi enriquecido de propósito (antes a Raposa tinha 0 palavras
+  avançadas e as outras repetiam a mesma, *tortoise* e *duckling*): para trocar o texto de uma história, edite o JSON
+  do seed, acrescente as formas em português em `nlp/data/pt_words.json`, rode `candidates --level advanced` para
+  conferir e depois `seed` e `annotate`.
+  **Atenção:** áudios já gerados de uma frase cujo texto mudou continuam `ready` com o áudio antigo; apague os
+  `audio_assets` da história (ou recomece com `docker compose down -v`) para gerar de novo.
+
 ## Trechos candidatos pela API
 
 `GET /stories/{id}/segments` (exige token) devolve as frases da história em ordem de `position`, cada uma com suas anotações em ordem de `en_start`.
@@ -183,16 +217,26 @@ uma URL assinada que abre direto no navegador:
 ```bash
 docker compose exec api python -m scripts.upload_sample_audio                  # gera um tom de 30 s
 docker compose exec api python -m scripts.upload_sample_audio caminho/do.mp3   # envia um arquivo seu
+docker compose exec api python -m scripts.upload_sample_audio --story 1 --story 2   # áudio das histórias 1 e 2
 ```
+
+O player da página `/player/<id da história>` pede o áudio na chave `stories/<id>/audio.wav`. Com `--story` o
+script grava o tom de exemplo nessa chave (ou um `.wav` seu, se você informar o caminho). Uma história sem áudio
+mostra "O áudio desta história ainda não foi gerado." no player.
 
 ## Streaming de áudio
 
 A tag `<audio>` do navegador não envia o header `Authorization`, então o áudio é entregue por uma URL
 assinada (HMAC-SHA256) de curta duração, em duas etapas:
 
-1. O front chama `GET /audio/url?key=<chave>` **com o token** e recebe `{"url": ..., "expires_at": ...}`.
+1. O front chama `GET /audio/segments/{segment_id}?filter_id=<id>` **com o token** e recebe
+   `{"url": ..., "expires_at": ..., "segment_id": ..., "duration_ms": ..., "format": "wav"}`. A rota confere que o
+   filtro é do usuário (veja "Geração do áudio" abaixo).
 2. O front põe essa `url` no `src` do `<audio>`. Ela aponta para `GET /audio/stream`, que **não exige token**:
    a assinatura basta.
+
+`GET /audio/url?key=<chave>`, que assina uma chave **qualquer** do armazenamento, só funciona com
+`APP_ENV=development` (fora dele responde `404`). Serve ao áudio de exemplo do player enquanto ele não usa a rota por frase.
 
 `GET /audio/stream` suporta o header `Range`, para o player pular para o meio sem baixar o arquivo todo:
 
@@ -215,16 +259,416 @@ Para testar com `curl`, gere uma URL em `GET /audio/url` (pelo `/docs`, depois d
 curl -s -o /dev/null -D - -H "Range: bytes=0-99" "<url>"
 ```
 
-## Testes do backend
+## Fluxo completo: do cadastro ao áudio
+
+Com o projeto no ar e os passos 1 a 4 de "Rodando o projeto" feitos, dá para percorrer o pipeline inteiro só com a
+API. Sem nenhuma chave: o provedor padrão (`TTS_PROVIDER=fake`) gera tons audíveis em vez de voz.
+
+```bash
+# 1. Cadastre-se e entre (guarde o access_token)
+curl -s -X POST localhost:8000/auth/register -H "Content-Type: application/json" \
+  -d '{"name":"Ana","email":"ana@teste.com","password":"Senha1234"}'
+TOKEN=$(curl -s -X POST localhost:8000/auth/login -H "Content-Type: application/json" \
+  -d '{"email":"ana@teste.com","password":"Senha1234"}' | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+# 2. Crie um filtro para a história 1 (idioma base português, phrasal verbs, densidade alta)
+curl -s -X POST localhost:8000/filters -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"story_id":1,"rules":{"base_language":"pt","segment_types":["phrasal_verbs"],"density":"high"}}'
+
+# 3. Veja o texto com as trocas (não gera áudio) e depois gere o áudio (filter_id = id devolvido no passo 2)
+curl -s "localhost:8000/stories/1/preview?filter_id=1" -H "Authorization: Bearer $TOKEN"
+curl -s -X POST localhost:8000/stories/1/audio -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"filter_id":1}'
+
+# 4. Acompanhe o progresso até `state` ser "ready"
+curl -s "localhost:8000/stories/1/audio/status?filter_id=1" -H "Authorization: Bearer $TOKEN"
+
+# 5. Pegue a URL assinada da frase (segment_id vem do status) e baixe com Range
+curl -s "localhost:8000/audio/segments/1?filter_id=1" -H "Authorization: Bearer $TOKEN"
+```
+
+Cole a `url` devolvida no navegador para ouvir, ou use `curl -H "Range: bytes=0-43" "<url>"` para ver o `206`. No
+front, o mesmo caminho é **Ouvir** na tela do filtro. Para ver os números do cache (acertos, erros, economia), rode
+`docker compose exec api python -m app.modules.audio.cache stats`.
+
+Variáveis de ambiente do pipeline (em `backend/.env`; os padrões servem para desenvolvimento):
+
+| Variável | Padrão | Para que serve |
+|---|---|---|
+| `TTS_PROVIDER` | `fake` | `fake` (tons, sem chave) ou o fornecedor real |
+| `TTS_API_KEY`, `TTS_REGION` | vazio | credenciais do fornecedor real (não usadas pelo `fake`) |
+| `TTS_VOICE_ID` | `fake-voice` | voz usada na síntese; entra na chave do cache |
+| `TTS_COST_PER_1K_CHARS` | `0` | preço por 1.000 caracteres, só para estimar o custo evitado pelo cache |
+| `AUDIO_SIGNING_SECRET` | `change-me-audio` | segredo das URLs assinadas do áudio (troque em produção) |
+| `AUDIO_URL_TTL_SECONDS` | `3600` | validade da URL assinada |
+| `STORAGE_BACKEND` | `s3` | `s3` (MinIO ou R2) ou `memory` (testes) |
+
+Os modelos, os exemplos de resposta de cada endpoint e as decisões que mudaram em relação ao planejamento estão em
+[`docs/pipeline-audio.md`](docs/pipeline-audio.md).
+
+## Geração do áudio (AudioGenerationFacade)
+
+A `AudioGenerationFacade` (`backend/app/modules/audio/facade.py`) gera o áudio de uma história com um filtro: para
+cada frase, em ordem, compõe o SSML (AudioComposer), sintetiza (TTS), grava no armazenamento e marca o `AudioAsset`
+como `ready`. Erros recuperáveis do TTS são tentados de novo; uma frase que falha de vez fica `failed` sem derrubar
+as outras. Gerar de novo não refaz o que já está pronto, e frases presas em `generating` voltam para a fila.
+
+Todas as rotas exigem token; filtro inexistente ou de outro usuário responde `404`, e filtro de outra história, `422`.
+
+| Rota | O que faz |
+|---|---|
+| `POST /stories/{story_id}/audio` com `{"filter_id": 3}` | dispara a geração em segundo plano e responde `202` com o status. Durante a geração não dispara outra (`202`); com tudo pronto responde `200` |
+| `GET /stories/{story_id}/audio/status?filter_id=3` | progresso, para o front consultar por polling |
+| `GET /audio/segments/{segment_id}?filter_id=3` | URL assinada do áudio da frase; `409` se ainda não está pronto ou se falhou |
+| `GET /stories/{story_id}/audio/full?filter_id=3` | **áudio único** da história: URL assinada de um arquivo só com todas as frases, a duração total e onde cada frase começa (`start_ms`); `409` se alguma frase ainda não terminou. As frases que falharam ficam de fora (`skipped`) |
+
+Resposta do `POST` e do `status`:
+
+```json
+{
+  "story_id": 1, "filter_id": 3, "state": "generating", "total": 12, "ready": 5, "failed": 0,
+  "segments": [{"segment_id": 7, "position": 0, "status": "ready", "duration_ms": 2340, "error": null}]
+}
+```
+
+`state` é `pending` (nada em andamento), `generating`, `ready` (todas prontas) ou `failed` (terminou com alguma frase
+em falha; um novo `POST` tenta de novo só as que falharam). `status` de cada frase: `pending`, `generating`, `ready`
+ou `failed`.
+
+### Pré-gerar o áudio de todas as histórias (demonstração)
+
+Para a primeira escuta de qualquer pessoa, com qualquer filtro, já encontrar tudo pronto (sem esperar a síntese),
+um comando gera o áudio de **todas as histórias em todos os casos** e monta o áudio único de cada combinação:
+
+```bash
+docker compose exec api python -m app.modules.audio.pregenerate --dry-run   # só lista as combinações (nada é gasto)
+docker compose exec api python -m app.modules.audio.pregenerate             # gera tudo
+docker compose exec api python -m app.modules.audio.pregenerate --story-id 1 --scenario C --density high
+```
+
+As combinações são as aceitas pela API (`SCENARIOS`): o **Cenário A** (phrasal verbs), o **B** (palavras difíceis, nos
+níveis intermediário e avançado) e o **C** (vocabulário avançado, densidade crescente), cada um nas três densidades:
+12 por história. As frases iguais entre combinações vêm do cache, então o custo real de TTS é bem menor que o número de
+combinações, e rodar de novo não refaz o que já está pronto. Usa o provedor e as vozes do ambiente (`TTS_PROVIDER`,
+`TTS_VOICE_ID`, `TTS_VOICE_ID_PT/EN`). Sai com código 1 se alguma frase falhar. Se o texto de uma história mudar,
+apague antes os `audio_assets` dela (veja o aviso em "Palavras difíceis e Cenário B").
+
+## Cache de áudio (US08)
+
+O TTS cobra por caractere, então o mesmo conteúdo é sintetizado **uma única vez**, para qualquer filtro e
+qualquer usuário. A identidade de um arquivo é a **chave de cache** (`backend/app/modules/audio/cache/key.py`):
+
+```python
+build_cache_key(ssml, voice_id, provider, audio_format)  # SHA-256 em hexadecimal (64 caracteres)
+```
+
+- Entram o SSML **normalizado** (espaços repetidos fora das tags viram um só; os das pontas saem), a voz, o
+  fornecedor do TTS, o formato do áudio e a `CACHE_KEY_VERSION`. O idioma está no próprio SSML (`xml:lang`).
+- Não entram usuário, filtro nem história: uma frase sem troca de idioma tem o mesmo SSML em qualquer filtro.
+- Mudar o texto, as trocas, o idioma, a voz, o fornecedor ou o formato gera outra chave, e portanto outro áudio.
+- Mudou a forma de calcular a chave? Suba a `CACHE_KEY_VERSION`: as chaves antigas deixam de bater.
+
+Cada arquivo do cache é um registro `AudioBlob` (tabela `audio_blobs`: chave única, chave do arquivo no
+armazenamento, formato, duração, tamanho, caracteres, acertos, erros, criação e último uso). O `AudioAsset` de
+cada frase aponta para o blob pela coluna `blob_id`.
+
+Na geração (`AudioGenerationFacade`), depois de compor o SSML de cada frase, o `AudioCache` calcula a chave e:
+
+- **acerto**: o blob existe e o arquivo está no armazenamento. O `AudioAsset` aponta para ele e fica `ready`, sem
+  chamar o TTS (o blob soma um acerto e atualiza o último uso);
+- **erro**: sintetiza, grava em `cache/<2 primeiros>/<chave>.<formato>` e só depois registra o blob. Uma falha no
+  meio deixa no máximo um arquivo órfão, nunca um registro apontando para um arquivo inexistente;
+- **arquivo sumido**: o blob existe mas o arquivo não; a frase é sintetizada de novo e o registro é corrigido.
+
+Dois pedidos simultâneos da mesma frase nova fazem uma única chamada ao TTS: um lock consultivo do Postgres
+(`pg_advisory_xact_lock`) por chave faz o segundo esperar o primeiro e encontrar o blob pronto. O log mostra os
+acertos e erros de cada frase e, no fim, o total de caracteres economizados.
+
+Comandos (rode dentro de `backend/`):
+
+```bash
+# Estatísticas: arquivos, tamanho, acertos, erros, taxa de acerto, caracteres economizados e custo evitado
+python -m app.modules.audio.cache stats          # --json para a mesma informação em JSON
+# Limpeza: sem opções não apaga nada; --dry-run só mostra o relatório
+python -m app.modules.audio.cache purge --older-than 30 --dry-run   # sem uso há mais de 30 dias
+python -m app.modules.audio.cache purge --max-size 500MB            # os menos usados até caber em 500 MB
+```
+
+- O custo evitado usa `TTS_COST_PER_1K_CHARS` (preço do fornecedor por 1.000 caracteres; padrão `0`, e então o
+  custo aparece zerado). O `stats` só lê o banco. Os contadores são do cache atual: um blob apagado pela limpeza
+  leva os seus junto.
+- A limpeza devolve para `pending` os áudios de frase que usavam o blob (gerar de novo recria o áudio), apaga o
+  registro e só depois apaga o arquivo. Se apagar o arquivo falhar, sobra um arquivo órfão, nunca um registro
+  apontando para um arquivo inexistente.
+
+## Provedor de TTS (síntese de voz)
+
+A voz é gerada por um provedor de TTS escolhido por configuração. O código usa sempre a interface `TTSProvider`
+(`app/integrations/tts`), recebida pela dependência `Depends(get_tts_provider)`, então trocar de fornecedor não mexe
+no resto do sistema. Nenhum módulo fala direto com o fornecedor.
+
+| Variável (`backend/.env`) | Para que serve |
+|---|---|
+| `TTS_PROVIDER` | `fake` (padrão): gera tons, sem rede e sem chave. `azure`: voz real do Azure Speech. Um valor desconhecido **derruba a API na subida**, com a lista dos que existem |
+| `TTS_API_KEY` | chave do fornecedor real (o provedor falso ignora). Nunca vai para o repositório |
+| `TTS_REGION` | região do serviço do fornecedor real (no Azure, ex.: `brazilsouth`, `eastus`) |
+| `TTS_VOICE_ID` | voz padrão da síntese (no Azure, o nome da voz, ex.: `pt-BR-ThalitaMultilingualNeural`) |
+| `TTS_VOICE_ID_PT`, `TTS_VOICE_ID_EN` | opcionais: voz do filtro com idioma base português (`PT`) ou inglês (`EN`). Vazias, valem a `TTS_VOICE_ID` |
+
+Um clone novo sobe com `TTS_PROVIDER=fake`, sem nenhuma chave.
+
+**O provedor falso é audível.** Ele lê o SSML e, para cada pedaço de texto, gera um tom de 60 ms por caractere: o
+idioma base do `<speak>` soa como um tom **grave** (330 Hz) e um trecho em outro idioma (`<lang xml:lang="en-US">`)
+como um tom **agudo** (660 Hz). Assim a troca de idioma já pode ser ouvida sem TTS real. As tags não contam na duração.
+Ele também guarda as chamadas recebidas em `calls`, para os testes conferirem o SSML enviado.
+
+```python
+from app.integrations.tts import FakeTTSProvider
+
+fake = FakeTTSProvider()
+resultado = fake.synthesize(
+    '<speak xml:lang="pt-BR">A raposa <lang xml:lang="en-US">gave up</lang> das uvas.</speak>', "qualquer-voz"
+)
+resultado.format       # "wav"
+resultado.duration_ms  # 60 ms por caractere de texto (sem as tags)
+fake.calls             # [FakeCall(ssml=..., voice_id="qualquer-voz")]
+```
+
+Nos testes, troque o provedor com `app.dependency_overrides[get_tts_provider] = lambda: FakeTTSProvider()`.
+Um erro de síntese é um `TTSError`, com `retryable` dizendo se vale tentar de novo.
+
+### TTS real (Azure Speech)
+
+O `AzureTTSAdapter` (`app/integrations/tts/azure.py`) chama a API REST do Azure Speech com `httpx` e devolve um MP3
+(24 kHz, 48 kbit/s, mono). A troca de idioma é feita pelo próprio SSML: o trecho em `<lang xml:lang="en-US">` é falado
+em inglês **com a mesma voz**, desde que a voz seja *multilíngue* (com `Multilingual` no nome). O adaptador põe a voz
+no SSML (`<voice name="...">`), então o compositor não precisa saber qual é.
+
+1. No [portal do Azure](https://portal.azure.com), crie um recurso **Speech** (o plano gratuito F0 serve; com o
+   Azure for Students não precisa de cartão).
+2. Em **Chaves e ponto de extremidade**, copie a **Chave 1** e a **Região**.
+3. No `backend/.env` (que não vai para o repositório):
+
+   ```
+   TTS_PROVIDER=azure
+   TTS_API_KEY=<a chave>
+   TTS_REGION=<a região, ex.: brazilsouth>
+   TTS_VOICE_ID=pt-BR-ThalitaMultilingualNeural
+   ```
+
+4. Reinicie a API. Sem `TTS_API_KEY` ou `TTS_REGION`, ou com a voz do provedor falso (`fake-voice`), a API não sobe
+   e diz qual variável falta.
+
+**Trocar a voz** é só mudar `TTS_VOICE_ID`, sem mexer em código. **Uma voz por idioma base:** o Cenário B (base inglês)
+pode ter outra voz que o A e o C (base português). Defina `TTS_VOICE_ID_PT` e/ou `TTS_VOICE_ID_EN` no `backend/.env`; a
+voz que não for definida cai na `TTS_VOICE_ID`, então quem só define a padrão não muda nada. A voz usada fica no
+`AudioAsset` e na chave do cache: trocar a voz de um idioma gera áudio novo só para os filtros desse idioma. Com
+`TTS_PROVIDER=azure`, os dois idiomas precisam acabar com uma voz do Azure (a API não sobe com a `fake-voice`). Candidatas multilíngues: `pt-BR-ThalitaMultilingualNeural`,
+`en-US-AvaMultilingualNeural` e `en-US-AndrewMultilingualNeural` (a lista completa está na
+[documentação do Azure](https://learn.microsoft.com/azure/ai-services/speech-service/language-support?tabs=tts)).
+A comparação entre elas e a voz escolhida estão em [`docs/poc-tts.md`](docs/poc-tts.md).
+
+**Erros e novas tentativas.** Respostas `429` e `5xx`, tempo esgotado (10 s) e falhas de rede são tentados de novo
+até 3 vezes, com espera crescente (0,5 s, 1 s, 2 s, ou o `Retry-After` do Azure); depois vem um
+`TTSError(retryable=True)`. `400` (SSML recusado) e `401`/`403` (chave) levantam `TTSError(retryable=False)` na hora.
+A chave nunca aparece em mensagens de erro, logs nem no `repr` do adaptador.
+
+**Teste com o Azure de verdade.** Os testes normais simulam o Azure e rodam sem rede. O teste manual sintetiza uma
+frase com troca de idioma, confere a duração e salva o MP3 para ouvir. Ele só roda com a chave no `backend/.env`
+(sem ela, aparece como pulado). Na pasta `backend`:
+
+```
+.\venv\Scripts\python.exe -m pytest -m tts_real -s
+
+## Composição do áudio (AudioComposer)
+
+O `AudioComposer` (`backend/app/modules/audio/composer/`) decide **o que muda de idioma** em cada frase e monta o texto
+com marcação SSML que vai ao TTS. Ele não usa rede, banco nem TTS: recebe frases e anotações e devolve texto, por isso é
+fácil de testar.
+
+```python
+from app.modules.audio.composer import AudioComposer
+
+composer = AudioComposer()
+# 1) escolhe os trechos trocados na HISTÓRIA INTEIRA (o que a densidade do filtro pede)
+selected = composer.select_swaps(segments, ["phrasal_verbs"], "medium")
+# 2) compõe cada frase
+composed = composer.compose(segment, selected, "pt")
+composed.ssml   # <speak version="1.0" xml:lang="pt-BR">A raposa <lang xml:lang="en-US">gave up</lang> das uvas.</speak>
+composed.text   # "A raposa desistiu das uvas."  (o texto que aparece na tela, sem marcação)
+composed.swaps  # [Swap(start=9, end=17, text="desistiu", spoken="gave up", lang="en-US", annotation_id=1)]
+```
+
+**Densidade.** É a fração dos phrasal verbs **da história inteira** (e não por frase) que muda de idioma:
+
+| Densidade | Fração trocada | Exemplo, história com 20 trechos |
+|---|---|---|
+| `low` (baixa) | 15% | 3 trechos |
+| `medium` (média) | 35% | 7 trechos |
+| `high` (alta) | 60% | 12 trechos |
+
+As frações são constantes (`DENSITY_SHARE`, em `density.py`). Só entram os trechos que **têm equivalente em português**
+(o campo `pt_*` preenchido), e só eles contam na fração.
+
+**Determinismo.** A escolha não usa sorteio: os trechos escolhidos ficam no meio de faixas iguais da história (o 1º, o 4º, o 7º...,
+espaçados de forma regular). O mesmo filtro e a mesma história geram sempre o mesmo SSML, o que o cache de áudio exige.
+
+**Direção.** Com `base_language="pt"` o português fica na tela e os trechos são falados em inglês (`en-US`). Com `"en"` é o
+inverso (os trechos são falados em `pt-BR`). O `Swap` informa as posições no texto exibido, para o front destacar o trecho.
+
+**Novos tipos de trecho.** O filtro usa `phrasal_verbs` (plural) e a anotação usa `phrasal_verb` (singular): a `SwapStrategyFactory`
+liga um ao outro. Um tipo novo entra com uma `SwapStrategy` e uma linha na fábrica.
+
+Para **ver** a composição das histórias reais (precisa do seed e da anotação), sem escrever código:
+
+```bash
+docker compose exec api python -m scripts.compose_demo --density high
+docker compose exec api python -m scripts.compose_demo --story 2 --density low --ssml
+```
+
+## Prévia do texto com as trocas
+
+`GET /stories/{story_id}/preview?filter_id=<id>` (exige token) mostra **o que vai mudar de idioma** sem gerar áudio: não
+gasta TTS e não grava nada no banco. O front usa esta rota para exibir o texto e destacar os trechos, em vez de calcular a
+seleção por conta própria: ela usa o mesmo `AudioComposer` da geração de áudio, então o que o usuário vê é o que ele ouve.
+
+```json
+{
+  "story": {"id": 1, "title": "A Raposa e as Uvas", "language": "en"},
+  "rules": {"base_language": "pt", "segment_types": ["phrasal_verbs"], "density": "high"},
+  "totals": {"segments": 12, "candidates": 9, "swapped": 5},
+  "segments": [
+    {"id": 7, "position": 8, "text": "Um passarinho viu a raposa desistir e voou para longe.",
+     "swaps": [{"start": 27, "end": 35, "text": "desistir", "spoken": "give up", "lang": "en-US", "annotation_id": 31}]}
+  ]
+}
+```
+
+- `text` é a frase no **idioma base do filtro**, sem marcação. Em cada troca, `text[start:end]` é o trecho que muda de idioma,
+  e `spoken` é o que será falado no lugar dele (em `lang`).
+- `totals`: `candidates` são os trechos que poderiam ser trocados (têm equivalente em português), e `swapped` é a soma dos
+  `swaps` de todas as frases.
+- O mesmo filtro devolve sempre a mesma prévia. As frases vêm em ordem de `position`.
+
+| Resposta | Quando |
+|---|---|
+| `401` | sem token |
+| `404` | história inexistente, ou filtro inexistente ou de outro usuário |
+| `422` | filtro criado para outra história, regras do filtro inválidas ou `filter_id` ausente |
+
+O contrato completo está no `/docs` (Swagger), com os schemas `PreviewRead` e `SwapRead`.
+
+## Telas do front: início, filtro e player
+
+O caminho do usuário é **login → tela inicial → filtro → player**:
+
+1. **Tela inicial (`/`)**, onde o login cai: saudação com o seu nome, a seção **Continuar ouvindo** (até 5 histórias
+   em andamento, com barra de progresso e "frase 7 de 12"), a lista de **Histórias** e o botão **Sair**. **Continuar**
+   abre o player com o filtro que você estava usando; **Ouvir** abre o filtro com aquela história já escolhida.
+2. **Filtro (`/filter?story=<id>`)**: escolha o idioma base, o tipo de trecho e a densidade, e clique em **Salvar filtro**.
+   O botão fica desativado até haver idioma base e pelo menos um tipo de trecho. O filtro é gravado em `/filters`,
+   vinculado ao seu usuário, e reaparece preenchido ao reabrir a tela (um filtro por história). **Início** volta à tela inicial.
+3. **Player (`/player/<história>?filter=<id>`)**: com o filtro salvo, **Ouvir** gera o áudio (em segundo plano, frase a
+   frase). Enquanto gera, começa a tocar assim que a primeira frase fica pronta; quando a geração termina, a
+   história passa a tocar num **áudio único e contínuo**, com uma barra de progresso para a história toda: dá para
+   voltar até qualquer palavra arrastando a barra, com o −15 s ou pelo botão ▶ ao lado de cada frase no texto (ou
+   pelas colunas da faixa de densidade). Há ainda play/pausa, velocidades de 0,75x a 2x (sem mudar o tom da voz), a
+   frase tocando destacada no texto e os trechos trocados marcados. Se o áudio único não puder ser montado, o
+   player segue frase a frase.
+
+**Retomar de onde parou.** O player guarda a posição sozinho, sem o usuário perceber: a cada 5 s enquanto toca, ao
+pausar e ao fechar ou esconder a página (`PUT /stories/{id}/progress`); uma falha de rede é ignorada e a posição vai no
+ciclo seguinte. Ao abrir uma história já começada, um cartão pergunta **Continuar** (volta à frase e ao ponto salvos) ou
+**Recomeçar** (apaga o progresso). Ao terminar a história, ela é marcada como concluída e sai de "Continuar ouvindo".
+Como o progresso fica no servidor, funciona em outro navegador, logado na mesma conta.
+
+## Testes e integração contínua
+
+### Rodando os testes
+
+**Backend** (pytest, dentro do container):
 
 ```bash
 docker compose exec api pip install -r requirements-dev.txt
 docker compose exec api python -m pytest
+docker compose exec api python -m pytest --cov=app --cov-report=term-missing:skip-covered   # com cobertura
 ```
-Os testes que usam o banco rodam numa transação que é desfeita no final: não alteram os dados do seu ambiente.
-Eles precisam do Postgres no ar e migrado (`alembic upgrade head`); sem isso, são pulados.
-O `pip install` precisa ser repetido se o container for recriado (`docker compose up --build`).
-Os testes de armazenamento rodam na `InMemoryStorage` sempre e no MinIO quando ele está no ar; sem ele, a parte S3 é pulada.
+
+- Os testes que usam o banco rodam numa transação que é desfeita no final: não alteram os dados do seu ambiente.
+  Eles precisam do Postgres no ar e migrado (`alembic upgrade head`); **localmente** sem isso são pulados, e **na CI** a
+  suíte falha (senão ficaria verde sem testar nada).
+- O `pip install` precisa ser repetido se o container for recriado (`docker compose up --build`).
+- Os testes de armazenamento rodam na `InMemoryStorage` sempre e no MinIO quando ele está no ar; sem ele, a parte S3 é pulada.
+- Os testes de API usam a fixture `api` (cliente HTTP com a autenticação **real**) e `make_user` (cria um usuário pela
+  própria API), definidas em `backend/tests/conftest.py`.
+
+**Pipeline de áudio (NLP → TTS → armazenamento) e API de áudio.** Cada camada tem o seu arquivo e
+`tests/test_audio_pipeline.py` testa o fluxo inteiro, como o front o percorre (cadastro, login, filtro, prévia,
+geração, status e download de cada frase com `Range`):
+
+| Arquivo | O que cobre |
+|---|---|
+| `test_tts.py`, `test_composer.py`, `test_story_preview.py` | provedor de TTS, composição do SSML, prévia das trocas |
+| `test_audio_facade.py`, `test_audio_cache*.py` | Facade (retentativas, frases presas, falha por frase) e cache global |
+| `test_audio_generation_api.py`, `test_audio_stream.py` | `POST/GET` de geração e status, URL assinada e `Range` |
+| `test_audio_pipeline.py` | ponta a ponta: a prévia mostra o que o TTS recebe, o WAV tem o tom do idioma base e o da troca só onde a prévia manda, falha de uma frase não derruba as outras, outro usuário reaproveita o cache |
+
+```bash
+docker compose exec api python -m pytest tests/test_audio_pipeline.py -v
+# cobertura de cada módulo (a meta é 80% ou mais em ambos)
+docker compose exec api python -m pytest --cov=app.modules.audio --cov-report=term-missing:skip-covered
+docker compose exec api python -m pytest --cov=app.modules.stories --cov-report=term-missing:skip-covered
+```
+
+Esses testes não usam rede, chave nem MinIO (`FakeTTSProvider` + `InMemoryStorage`), e as contagens são sempre da
+história do próprio teste, então não dependem dos áudios que já existam no seu banco de desenvolvimento.
+
+**Frontend** (Vitest + Testing Library):
+
+```bash
+cd frontend
+npm run test:run     # uma vez
+npm test             # modo observação, reroda ao salvar
+```
+
+### Integração contínua (GitHub Actions)
+
+O workflow `.github/workflows/ci.yml` roda a cada pull request e a cada push na `develop` e na `main`:
+
+| Job | O que faz |
+|---|---|
+| Backend | PostgreSQL 16 de serviço, `alembic upgrade head`, `pytest` com cobertura e **falha se a cobertura ficar abaixo de 80%** |
+| Frontend | `npm ci`, `npm run lint`, `npm run build` (tipos + empacotamento) e `npm run test:run` |
+
+Regra da equipe: **um PR só é mergeado com os dois jobs verdes** (confira a aba *Checks* do PR). Para reproduzir a CI
+na sua máquina, rode os comandos acima antes de abrir o PR.
+
+### Proteção da `develop` e da `main`
+
+O ruleset **"Regras de Merge"** (*Settings > Rules > Rulesets*) vale para a `develop` e para a `main`, sem exceções
+(nem para administradores):
+
+- **Só por pull request, com 1 aprovação de outra pessoa.** Push direto na branch é recusado, e o GitHub não deixa
+  aprovar o próprio PR. Peça a revisão em *Reviewers* ao abrir o PR.
+- **Não é possível apagar a branch nem fazer force push.**
+
+Fluxo: o autor abre o PR, outra pessoa revisa e aprova, e o **autor** faz o merge. Os jobs verdes da CI continuam sendo
+regra da equipe, mas não bloqueiam o merge no GitHub: confira antes de mergear.
+
+### TDD: como escrevemos código novo
+
+Funcionalidade nova entra pelo teste, na ordem **vermelho → verde → refatorar**:
+
+1. **Vermelho:** escreva o teste do critério de aceite da issue e rode: ele deve **falhar** (prova que o teste enxerga a falta).
+2. **Verde:** escreva o mínimo de código para o teste passar.
+3. **Refatorar:** limpe o código com a suíte verde, e só então abra o PR.
+
+Boas práticas do projeto:
+
+- Cada critério de aceite da issue vira pelo menos um teste (o nome do teste diz o que ele garante).
+- Teste o erro também: `401`, `404`, `409` e `422`, não só o caminho feliz.
+- Nada de rede, de chave de API paga nem de MinIO nos testes: use o `FakeTTSProvider` e a `InMemoryStorage`.
+- Para duvidar de um teste, estrague o código de propósito (por exemplo, troque um `409` por `400`) e veja se ele falha.
+- Código que só existe para a CI passar não vale: se a cobertura cair, escreva o teste que falta.
 
 ## Rodando a API sem Docker
 

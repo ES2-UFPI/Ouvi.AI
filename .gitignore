@@ -1,4 +1,8 @@
 # Python
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
 venv/
 __pycache__/
 *.pyc
@@ -19,3 +23,6 @@ dist/
 .idea/
 *.DS_Store
 Thumbs.db
+
+# Áudios da prova de conceito do TTS (scripts/poc_tts.py)
+backend/poc-tts-audios/

@@ -1,3 +1,4 @@
 -r requirements.txt
 pytest
-httpx  # exigido pelo TestClient do FastAPI
+# httpx (usado pelo TestClient) já vem do requirements.txt
+pytest-cov  # cobertura de testes (usada na CI)

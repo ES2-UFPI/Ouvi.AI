@@ -1,0 +1,3 @@
+# Lemas que SEMPRE viram palavra difícil (nível avançado), mesmo com frequência alta
+# (um por linha; # começa um comentário). Use para "falsos amigos" e palavras comuns que costumam
+# enganar quem fala português.

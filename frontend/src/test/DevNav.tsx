@@ -5,7 +5,7 @@ const ROUTES = [
   { path: '/cadastro', label: 'Cadastro' },
   { path: '/', label: 'Dashboard' },
   { path: '/filter', label: 'Filtro de Audição' },
-  { path: '/player/material-teste-123', label: 'Player' },
+  { path: '/player/1', label: 'Player' },
 ]
 
 export function DevNav() {

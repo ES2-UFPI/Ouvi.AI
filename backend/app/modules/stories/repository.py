@@ -1,7 +1,8 @@
 """Camada Repository: único ponto de acesso aos dados deste módulo."""
+from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -52,6 +53,15 @@ class SegmentRepository:
             Segment.story_id == story_id, Segment.position == position
         )
         return self.db.scalar(stmt)
+
+    def count_by_story(self, story_id: int) -> int:
+        stmt = select(func.count()).select_from(Segment).where(Segment.story_id == story_id)
+        return self.db.scalar(stmt) or 0
+
+    def count_by_stories(self) -> dict[int, int]:
+        """Número de frases de cada história numa única consulta (histórias sem frases não aparecem)."""
+        stmt = select(Segment.story_id, func.count()).group_by(Segment.story_id)
+        return {story_id: total for story_id, total in self.db.execute(stmt)}
 
     def list_by_story(
         self, story_id: int, kind: str | None = None, aligned_only: bool = False
@@ -170,11 +180,17 @@ class AnnotationRepository:
             self.db.refresh(annotation)
         return annotation
 
-    def delete_by_segment(self, segment_id: int, commit: bool = True) -> int:
-        """Apaga as anotações de uma frase e devolve quantas eram. Base da reanotação idempotente."""
-        result = self.db.execute(
-            delete(Annotation).where(Annotation.segment_id == segment_id)
-        )
+    def delete_by_segment(
+        self, segment_id: int, commit: bool = True, kinds: Sequence[str] | None = None
+    ) -> int:
+        """Apaga as anotações de uma frase e devolve quantas eram. Base da reanotação idempotente.
+
+        Com `kinds`, apaga só as anotações desses tipos: reanotar as palavras difíceis não apaga os
+        phrasal verbs, e o contrário também. Sem `kinds`, apaga todas."""
+        stmt = delete(Annotation).where(Annotation.segment_id == segment_id)
+        if kinds is not None:
+            stmt = stmt.where(Annotation.kind.in_(list(kinds)))
+        result = self.db.execute(stmt)
         if commit:
             self.db.commit()
         return result.rowcount

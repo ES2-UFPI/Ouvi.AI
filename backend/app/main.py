@@ -7,10 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.integrations.storage import StorageError, get_storage
+from app.integrations.tts import get_tts_provider
+from app.modules.audio.generation_router import router as audio_generation_router
+from app.modules.audio.preview_router import router as preview_router
 from app.modules.audio.router import router as audio_router
 from app.modules.auth.router import router as auth_router
 from app.modules.filters.router import router as filters_router
 from app.modules.health.router import router as health_router
+from app.modules.progress.router import router as progress_router
 from app.modules.stories.router import router as stories_router
 from app.modules.users.router import router as users_router
 
@@ -19,6 +23,10 @@ logger = logging.getLogger("uvicorn.error")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Cria o provedor de TTS já na subida: um TTS_PROVIDER errado derruba a API na hora (com a
+    # mensagem dizendo quais existem), e não na primeira requisição de um usuário
+    logger.info("Provedor de TTS: %s", type(get_tts_provider()).__name__)
+
     # Só em desenvolvimento: em produção o bucket é criado uma vez, à mão, com as permissões certas
     if get_settings().app_env == "development":
         try:
@@ -45,7 +53,10 @@ def create_app() -> FastAPI:
     app.include_router(users_router)
     app.include_router(filters_router)
     app.include_router(stories_router)
+    app.include_router(preview_router)
     app.include_router(audio_router)
+    app.include_router(audio_generation_router)
+    app.include_router(progress_router)
 
     return app
 
