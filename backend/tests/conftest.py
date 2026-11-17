@@ -19,6 +19,21 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
             terminalreporter.write_line(line)
 
 
+@pytest.fixture(autouse=True)
+def _sem_configuracao_de_tts_local(monkeypatch):
+    """Os testes não dependem do TTS configurado na máquina de quem roda.
+
+    O docker compose injeta o backend/.env nas variáveis do container, e o Settings() também lê o arquivo .env:
+    quem liga o Azure (TTS_PROVIDER, vozes, chave) mudaria o resultado de testes que esperam os valores padrão.
+    Os testes manuais do Azure (test_tts_azure.py) leem as configurações reais na importação e continuam funcionando.
+    """
+    from app.core.config import Settings
+
+    for nome in ("TTS_PROVIDER", "TTS_API_KEY", "TTS_REGION", "TTS_VOICE_ID", "TTS_VOICE_ID_PT", "TTS_VOICE_ID_EN"):
+        monkeypatch.delenv(nome, raising=False)
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+
+
 PASSWORD = "Senha1234"
 
 
