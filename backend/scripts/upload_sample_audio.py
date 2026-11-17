@@ -3,6 +3,7 @@
 Uso, a partir da pasta backend:
     python -m scripts.upload_sample_audio                 # gera um tom de 30 s e envia
     python -m scripts.upload_sample_audio caminho/do.mp3  # envia o arquivo informado
+    python -m scripts.upload_sample_audio --story 1 --story 2   # grava como o áudio das histórias 1 e 2
 
 No Docker: docker compose exec api python -m scripts.upload_sample_audio
 """
@@ -40,6 +41,10 @@ def generate_tone(seconds: int = 30) -> bytes:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("arquivo", nargs="?", type=Path, help="áudio a enviar (padrão: gera um tom)")
+    parser.add_argument(
+        "--story", type=int, action="append", metavar="ID",
+        help="grava o áudio como o da história ID (stories/ID/audio.wav), a chave que o player usa; pode repetir",
+    )
     args = parser.parse_args()
 
     if args.arquivo:
@@ -51,12 +56,18 @@ def main() -> None:
         key = "samples/tom-440-660hz.wav"
         content_type = "audio/wav"
 
+    if args.story and args.arquivo and args.arquivo.suffix.lower() != ".wav":
+        parser.error("com --story o arquivo precisa ser .wav (a chave usada pelo player termina em .wav)")
+
+    # Enquanto não há TTS, o player procura o áudio da história na chave stories/<id>/audio.wav
+    keys = [f"stories/{story_id}/audio.wav" for story_id in args.story] if args.story else [key]
+
     storage = create_storage(get_settings())
     storage.ensure_bucket()
-    storage.put(key, data, content_type=content_type)
-
-    print(f"Chave gravada: {key} ({len(data)} bytes)")
-    print(f"URL assinada (1 h): {storage.presigned_url(key)}")
+    for k in keys:
+        storage.put(k, data, content_type=content_type)
+        print(f"Chave gravada: {k} ({len(data)} bytes)")
+    print(f"URL assinada (1 h): {storage.presigned_url(keys[0])}")
 
 
 if __name__ == "__main__":

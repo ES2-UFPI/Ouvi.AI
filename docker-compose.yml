@@ -1,10 +1,11 @@
+# Os valores depois de :- são os mesmos do .env.example: o projeto sobe logo após o git clone, sem copiar o .env
 services:
   db:
     image: postgres:16
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:-ouveai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ouveai}
+      POSTGRES_DB: ${POSTGRES_DB:-ouveai}
     ports:
       - "5432:5432"
     volumes:
@@ -22,8 +23,8 @@ services:
     user: root
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-ouveai}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-ouveai123}
       MINIO_CONSOLE_PORT_NUMBER: "9001"
     ports:
       - "9000:9000"
@@ -41,13 +42,13 @@ services:
     environment:
       # Dentro da rede do Compose os hosts são os nomes dos serviços, não localhost
       # Usa as mesmas variáveis do banco, para API e Postgres nunca ficarem com credenciais diferentes
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-ouveai}:${POSTGRES_PASSWORD:-ouveai}@db:5432/${POSTGRES_DB:-ouveai}
       STORAGE_ENDPOINT: http://minio:9000
       # O navegador não enxerga o host `minio`: as URLs assinadas usam a porta publicada no host
       STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
       # As credenciais do MinIO vêm do .env da raiz, para API e MinIO nunca ficarem diferentes
-      STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER}
-      STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-ouveai}
+      STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-ouveai123}
     ports:
       - "8000:8000"
     depends_on:

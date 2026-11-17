@@ -1,0 +1,110 @@
+# Integração contínua: roda os testes do backend e do frontend a cada PR e a cada push na develop e na main.
+# Um PR só deve ser mergeado com os dois jobs verdes.
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+# Um push novo no mesmo PR cancela a execução anterior, que já não vale mais
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # O mesmo PostgreSQL 16 do docker-compose: os testes usam JSONB, que o SQLite não tem
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ouveai
+          POSTGRES_PASSWORD: ouveai
+          POSTGRES_DB: ouveai
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ouveai -d ouveai"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+psycopg2://ouveai:ouveai@localhost:5432/ouveai
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Instalar dependências (inclui o modelo do spaCy)
+        run: pip install -r requirements-dev.txt
+
+      - name: Criar as tabelas (migrações)
+        run: alembic upgrade head
+
+      # --cov-fail-under: a CI falha se a cobertura cair abaixo de 80%.
+      # Os testes que precisam do MinIO são pulados aqui (não há MinIO na CI); os de banco NÃO podem ser pulados.
+      - name: Rodar os testes com cobertura
+        run: >-
+          python -m pytest
+          --cov=app
+          --cov-report=term-missing:skip-covered
+          --cov-report=xml
+          --cov-fail-under=80
+
+      - name: Guardar o relatório de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-backend
+          path: backend/coverage.xml
+          if-no-files-found: ignore
+
+  frontend:
+    name: Frontend (lint, build e vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # O Vitest 5 exige Node 22.12 ou mais novo (com o Node 20 os testes nem iniciam)
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build (checagem de tipos + empacotamento)
+        run: npm run build
+
+      - name: Testes
+        run: npm run test:run

@@ -1,0 +1,8 @@
+# Lemas que NUNCA viram palavra difícil, mesmo com frequência baixa (um por linha; # começa um comentário).
+# Use para palavras que a lista de frequência marca como raras, mas que qualquer aluno conhece,
+# e para interjeições e onomatopeias, que não têm tradução útil.
+okay
+hello
+oh
+ah
+quack

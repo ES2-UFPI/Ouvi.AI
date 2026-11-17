@@ -5,13 +5,13 @@
   "source": "Fábula de Esopo (domínio público). Recontagem original em inglês e em português.",
   "segments": [
     {
-      "en": "A hare was always bragging about how fast he could run.",
-      "pt": "Uma lebre vivia se gabando de como corria rápido.",
+      "en": "A boastful hare was always bragging about how fast he could run.",
+      "pt": "Uma lebre presunçosa vivia se gabando de como corria rápido.",
       "phrasal_verbs": []
     },
     {
-      "en": "One day, a tortoise got tired of hearing him show off.",
-      "pt": "Um dia, uma tartaruga se cansou de ouvi-lo se exibir.",
+      "en": "One day, a tenacious tortoise got tired of hearing him show off.",
+      "pt": "Um dia, uma tartaruga tenaz se cansou de ouvi-lo se exibir.",
       "phrasal_verbs": [
         {
           "lemma": "show off",
@@ -22,13 +22,13 @@
       ]
     },
     {
-      "en": "\"Let us have a race,\" said the tortoise, \"and we will see who is faster.\"",
-      "pt": "\"Vamos apostar uma corrida\", disse a tartaruga, \"e veremos quem é mais rápido\".",
+      "en": "\"Let us have a race,\" said the tortoise serenely, \"and we will see who is faster.\"",
+      "pt": "\"Vamos apostar uma corrida\", disse a tartaruga com serenidade, \"e veremos quem é mais rápido\".",
       "phrasal_verbs": []
     },
     {
-      "en": "The hare laughed so hard that he almost fell over.",
-      "pt": "A lebre riu tanto que quase caiu no chão.",
+      "en": "The hare cackled so hard that he almost fell over.",
+      "pt": "A lebre gargalhou tanto que quase caiu no chão.",
       "phrasal_verbs": [
         {
           "lemma": "fall over",
@@ -81,8 +81,8 @@
       ]
     },
     {
-      "en": "\"I have plenty of time,\" he thought, and he lay down under a tree.",
-      "pt": "\"Tenho tempo de sobra\", pensou, e se deitou debaixo de uma árvore.",
+      "en": "\"I have plenty of time,\" he thought smugly, and he lay down under a tree.",
+      "pt": "\"Tenho tempo de sobra\", pensou convencido, e se deitou debaixo de uma árvore.",
       "phrasal_verbs": [
         {
           "lemma": "lie down",
@@ -93,8 +93,8 @@
       ]
     },
     {
-      "en": "Soon he dozed off in the warm shade.",
-      "pt": "Logo ele pegou no sono na sombra morna.",
+      "en": "Soon he dozed off in the warm, drowsy shade.",
+      "pt": "Logo ele pegou no sono na sombra morna e sonolenta.",
       "phrasal_verbs": [
         {
           "lemma": "doze off",
@@ -105,13 +105,13 @@
       ]
     },
     {
-      "en": "Meanwhile, the tortoise kept walking, slowly and steadily.",
-      "pt": "Enquanto isso, a tartaruga continuou andando, devagar e sempre.",
+      "en": "Meanwhile, the tortoise kept plodding, slowly and steadily.",
+      "pt": "Enquanto isso, a tartaruga continuou se arrastando, devagar e sempre.",
       "phrasal_verbs": []
     },
     {
-      "en": "When the hare woke up, he saw the tortoise near the finish line.",
-      "pt": "Quando a lebre acordou, viu a tartaruga perto da linha de chegada.",
+      "en": "When the hare woke up, he saw the sluggish tortoise near the finish line.",
+      "pt": "Quando a lebre acordou, viu a vagarosa tartaruga perto da linha de chegada.",
       "phrasal_verbs": [
         {
           "lemma": "wake up",
@@ -122,13 +122,13 @@
       ]
     },
     {
-      "en": "He ran as fast as he could, but it was too late.",
-      "pt": "Correu o mais rápido que pôde, mas já era tarde demais.",
+      "en": "He ran frantically, as fast as he could, but it was too late.",
+      "pt": "Correu freneticamente, o mais rápido que pôde, mas já era tarde demais.",
       "phrasal_verbs": []
     },
     {
-      "en": "The tortoise crossed the line first while the crowd cheered her on.",
-      "pt": "A tartaruga cruzou a linha primeiro enquanto a multidão a incentivava.",
+      "en": "The tortoise crossed the line first while the jubilant crowd cheered her on.",
+      "pt": "A tartaruga cruzou a linha primeiro enquanto a multidão eufórica a incentivava.",
       "phrasal_verbs": [
         {
           "lemma": "cheer on",
@@ -139,8 +139,8 @@
       ]
     },
     {
-      "en": "From that day on, the hare never boasted again.",
-      "pt": "Daquele dia em diante, a lebre nunca mais se gabou.",
+      "en": "From that day on, the humbled hare never swaggered again.",
+      "pt": "Daquele dia em diante, a lebre humilhada nunca mais se pavoneou.",
       "phrasal_verbs": []
     },
     {

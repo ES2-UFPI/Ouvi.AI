@@ -25,7 +25,10 @@ def list_stories(
     service: StoryService = Depends(get_story_service),
 ) -> list[StoryRead]:
     """Lista simples das histórias disponíveis, para escolher no Filtro de Audição."""
-    return service.list_stories()
+    return [
+        StoryRead(id=story.id, title=story.title, description=story.description, segment_count=total)
+        for story, total in service.list_stories_with_counts()
+    ]
 
 
 @router.get("/{story_id}/segments", response_model=StorySegmentsRead)

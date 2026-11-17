@@ -1,0 +1,40 @@
+{
+  "description": "Corpus de referência do detector de palavras difíceis (#102, #109). Rotulado à mão: 'expected' são os lemas que um aluno de nível intermediário provavelmente NÃO conhece. Nomes próprios, números e palavras comuns nunca são esperados.",
+  "sentences": [
+    {"id": 1, "category": "positive", "en": "The tortoise moved slowly across the field.", "expected": ["tortoise"]},
+    {"id": 2, "category": "positive", "en": "She was reluctant to leave the party.", "expected": ["reluctant"]},
+    {"id": 3, "category": "positive", "en": "The hare dozed under a shady tree.", "expected": ["hare", "doze", "shady"]},
+    {"id": 4, "category": "positive", "en": "The clumsy duckling tripped over a pebble.", "expected": ["clumsy", "duckling", "trip", "pebble"]},
+    {"id": 5, "category": "positive", "en": "He boasted about his speed to everyone.", "expected": ["boast"]},
+    {"id": 6, "category": "positive", "en": "The grapes on the vine were ripe and juicy.", "expected": ["grape", "vine", "ripe", "juicy"]},
+    {"id": 7, "category": "positive", "en": "A graceful swan glided across the pond.", "expected": ["graceful", "swan", "glide"]},
+    {"id": 8, "category": "positive", "en": "The old hen scolded the noisy chicks.", "expected": ["hen", "scold", "chick"]},
+    {"id": 9, "category": "positive", "en": "The fox sneered at the sour fruit.", "expected": ["sneer", "sour"]},
+    {"id": 10, "category": "positive", "en": "They trudged through the muddy marsh.", "expected": ["trudge", "muddy", "marsh"]},
+    {"id": 11, "category": "positive", "en": "The weary traveller rested by the hearth.", "expected": ["weary", "traveller", "hearth"]},
+    {"id": 12, "category": "positive", "en": "Her stubborn refusal annoyed the villagers.", "expected": ["stubborn", "refusal", "villager"]},
+    {"id": 13, "category": "positive", "en": "The eggs began to hatch in the warm nest.", "expected": ["hatch"]},
+    {"id": 14, "category": "positive", "en": "A gentle breeze rustled the leaves.", "expected": ["breeze", "rustle"]},
+    {"id": 15, "category": "positive", "en": "The owl blinked and hooted softly.", "expected": ["owl", "blink", "hoot"]},
+    {"id": 16, "category": "positive", "en": "The countryside was covered in frost.", "expected": ["countryside", "frost"]},
+    {"id": 17, "category": "positive", "en": "The runner stumbled near the finish line.", "expected": ["stumble"]},
+    {"id": 18, "category": "positive", "en": "The farmer mended the broken fence with twine.", "expected": ["mend", "twine"]},
+    {"id": 19, "category": "positive", "en": "The meadow was full of fragrant blossoms.", "expected": ["meadow", "fragrant", "blossom"]},
+    {"id": 20, "category": "positive", "en": "He stared at his reflection in the puddle.", "expected": ["puddle"]},
+    {"id": 21, "category": "positive", "en": "The little bird pecked at the crumbs.", "expected": ["peck", "crumb"]},
+    {"id": 22, "category": "positive", "en": "She walked steadily toward the summit.", "expected": ["steadily", "summit"]},
+
+    {"id": 23, "category": "negative", "en": "The house was big and very old.", "expected": []},
+    {"id": 24, "category": "negative", "en": "He said that he was hungry.", "expected": []},
+    {"id": 25, "category": "negative", "en": "My mother works in a school.", "expected": []},
+    {"id": 26, "category": "negative", "en": "We went to the beach last summer.", "expected": []},
+    {"id": 27, "category": "negative", "en": "The children played in the garden all day.", "expected": []},
+    {"id": 28, "category": "negative", "en": "I want to buy a new car.", "expected": []},
+    {"id": 29, "category": "negative", "en": "She opened the door and smiled.", "expected": []},
+
+    {"id": 30, "category": "trap", "en": "Zephyrine met Ignatius in Lisbon in 1999.", "expected": []},
+    {"id": 31, "category": "trap", "en": "There were three hundred and twelve people.", "expected": []},
+    {"id": 32, "category": "trap", "en": "He gave up and sat down.", "expected": []},
+    {"id": 33, "category": "trap", "en": "Oh, hello! It is okay.", "expected": []}
+  ]
+}

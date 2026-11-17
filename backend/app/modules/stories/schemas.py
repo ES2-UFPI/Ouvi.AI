@@ -11,6 +11,8 @@ class StoryRead(BaseModel):
     id: int
     title: str
     description: str | None
+    # Número de frases: o front mostra "frase 7 de 12" sem precisar baixar o texto de cada história
+    segment_count: int = 0
 
 
 class StoryHeader(BaseModel):

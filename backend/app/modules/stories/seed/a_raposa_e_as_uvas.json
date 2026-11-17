@@ -5,13 +5,13 @@
   "source": "Fábula de Esopo (domínio público). Recontagem original em inglês e em português.",
   "segments": [
     {
-      "en": "One hot afternoon, a hungry fox was walking through the countryside.",
-      "pt": "Numa tarde quente, uma raposa faminta caminhava pelo campo.",
+      "en": "One sweltering afternoon, a famished fox was prowling through the countryside.",
+      "pt": "Numa tarde sufocante, uma raposa esfomeada rondava pelo campo.",
       "phrasal_verbs": []
     },
     {
-      "en": "She had not eaten for two days, so she set out to find some food.",
-      "pt": "Fazia dois dias que ela não comia, então partiu em busca de comida.",
+      "en": "She had not eaten for two days, so she set out to scavenge for food.",
+      "pt": "Fazia dois dias que ela não comia, então partiu para vasculhar atrás de comida.",
       "phrasal_verbs": [
         {
           "lemma": "set out",
@@ -22,8 +22,8 @@
       ]
     },
     {
-      "en": "Suddenly she looked up and saw a bunch of ripe grapes hanging from a high vine.",
-      "pt": "De repente, levantou os olhos e viu um cacho de uvas maduras pendurado numa parreira alta.",
+      "en": "Suddenly she looked up and saw a bunch of luscious grapes dangling from a lofty vine.",
+      "pt": "De repente, levantou os olhos e viu um cacho de uvas suculentas pendurado numa parreira elevada.",
       "phrasal_verbs": [
         {
           "lemma": "look up",
@@ -34,8 +34,8 @@
       ]
     },
     {
-      "en": "The grapes looked so sweet that her mouth began to water.",
-      "pt": "As uvas pareciam tão doces que ela ficou com água na boca.",
+      "en": "The grapes looked so plump and succulent that her mouth began to water.",
+      "pt": "As uvas pareciam tão rechonchudas e saborosas que ela ficou com água na boca.",
       "phrasal_verbs": []
     },
     {
@@ -63,8 +63,8 @@
       ]
     },
     {
-      "en": "She even tried to knock them down with a long stick.",
-      "pt": "Até tentou derrubá-las com um galho comprido.",
+      "en": "She even tried to knock them down with a gnarled stick.",
+      "pt": "Até tentou derrubá-las com um galho retorcido.",
       "phrasal_verbs": [
         {
           "lemma": "knock down",
@@ -75,8 +75,8 @@
       ]
     },
     {
-      "en": "At last she sat down under the vine, tired and angry.",
-      "pt": "Por fim, sentou-se debaixo da parreira, cansada e furiosa.",
+      "en": "At last she sat down under the vine, weary, parched and fuming.",
+      "pt": "Por fim, sentou-se debaixo da parreira, cansada, sedenta e fumegando de raiva.",
       "phrasal_verbs": [
         {
           "lemma": "sit down",
@@ -87,8 +87,8 @@
       ]
     },
     {
-      "en": "A little bird watched her give up and flew away.",
-      "pt": "Um passarinho viu a raposa desistir e voou para longe.",
+      "en": "A nimble little bird watched her give up and flew away.",
+      "pt": "Um passarinho ágil viu a raposa desistir e voou para longe.",
       "phrasal_verbs": [
         {
           "lemma": "give up",
@@ -105,8 +105,8 @@
       ]
     },
     {
-      "en": "\"Those grapes are probably sour,\" she said, and she walked away with her nose in the air.",
-      "pt": "\"Aquelas uvas devem estar azedas\", disse ela, e se afastou de nariz empinado.",
+      "en": "\"Those grapes are probably sour,\" she scoffed, and she walked away with her nose in the air.",
+      "pt": "\"Aquelas uvas devem estar azedas\", zombou ela, e se afastou de nariz empinado.",
       "phrasal_verbs": [
         {
           "lemma": "walk away",
@@ -117,13 +117,13 @@
       ]
     },
     {
-      "en": "It is easy to say you do not want something when you cannot get it.",
-      "pt": "É fácil dizer que não se quer algo quando não se consegue tê-lo.",
+      "en": "It is easy to disdain something when you cannot get it.",
+      "pt": "É fácil desdenhar de algo quando não se consegue tê-lo.",
       "phrasal_verbs": []
     },
     {
-      "en": "And so the fox went home, hungry but proud.",
-      "pt": "E assim a raposa voltou para casa, faminta, mas orgulhosa.",
+      "en": "And so the fox went home, ravenous but haughty.",
+      "pt": "E assim a raposa voltou para casa, faminta, mas altiva.",
       "phrasal_verbs": []
     }
   ]

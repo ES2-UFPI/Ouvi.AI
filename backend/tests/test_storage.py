@@ -4,6 +4,7 @@ Os mesmos testes rodam na `InMemoryStorage` e na `S3Storage`, para garantir que 
 comportam igual. A versão S3 precisa do MinIO no ar (docker compose up -d) e é pulada sem ele.
 """
 import uuid
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import pytest
@@ -118,7 +119,15 @@ def test_presigned_url_is_readable_with_range():
     storage.put(key, DATA)
     try:
         request = Request(storage.presigned_url(key, expires_in=60), headers={"Range": "bytes=0-99"})
-        with urlopen(request) as response:
+        try:
+            response = urlopen(request)
+        except URLError as exc:
+            # A URL usa o endereço público do MinIO (localhost:9000), que dentro do container da API
+            # não existe. HTTPError (403, 404...) é falha de verdade e não entra aqui.
+            if isinstance(exc, HTTPError):
+                raise
+            pytest.skip(f"endereço público do MinIO inalcançável deste ambiente: {exc.reason}")
+        with response:
             assert response.status == 206
             assert response.headers["Content-Range"] == f"bytes 0-99/{len(DATA)}"
             assert response.read() == DATA[:100]

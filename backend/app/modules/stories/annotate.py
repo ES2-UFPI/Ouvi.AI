@@ -1,20 +1,28 @@
-"""Comando de anotação: python -m app.modules.stories.annotate [--story-id N] [--dry-run]"""
+"""Comando de anotação: python -m app.modules.stories.annotate [--story-id N] [--kind TIPO]... [--dry-run]"""
 import argparse
 import sys
 
 from app.core.database import SessionLocal
 from app.modules.stories.annotator import AnnotationReport, StoryReport, TextAnnotator
+from app.modules.stories.nlp.factory import DetectorFactory
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m app.modules.stories.annotate",
         description=(
-            "Anota as histórias com os trechos candidatos à troca de idioma (phrasal verbs) e o equivalente "
-            "em português. Pode ser repetido: as anotações antigas são substituídas, sem duplicar nada."
+            "Anota as histórias com os trechos candidatos à troca de idioma (phrasal verbs, palavras difíceis) "
+            "e o equivalente em português. Pode ser repetido: as anotações antigas dos tipos pedidos são "
+            "substituídas, sem duplicar nada, e as dos outros tipos ficam intactas."
         ),
     )
     parser.add_argument("--story-id", type=int, help="anota só esta história (padrão: todas)")
+    parser.add_argument(
+        "--kind",
+        action="append",
+        choices=DetectorFactory.kinds(),
+        help="tipo de trecho a anotar; pode ser repetido (padrão: todos os tipos registrados)",
+    )
     parser.add_argument(
         "--dry-run", action="store_true", help="mostra o que seria feito, sem gravar nada no banco"
     )
@@ -43,18 +51,28 @@ def print_report(report: AnnotationReport, dry_run: bool) -> None:
     )
     print(f"{prefix}Anotações substituídas: {report.replaced}")
 
+    print(f"\n{prefix}Por tipo:")
+    for kind, stats in report.by_kind.items():
+        print(
+            f"{prefix}  {kind}: {stats.detected} detectados, {stats.aligned} alinhados, "
+            f"{stats.unaligned} sem equivalente, {stats.discarded} descartados por sobreposição"
+        )
+
     if report.unaligned_items:
         print("\nSem equivalente em português (gravados com os campos pt_* nulos):")
         for item in report.unaligned_items:
             print(f"  - {item.story}, frase {item.position + 1}: {item.lemma!r} ({item.en_text!r})")
-        print("  Para alinhar, acrescente as formas em português em nlp/data/pt_equivalents.json e rode de novo.")
+        print(
+            "  Para alinhar, acrescente as formas em português em nlp/data/pt_equivalents.json (phrasal verbs) "
+            "ou nlp/data/pt_words.json (palavras difíceis) e rode de novo."
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     with SessionLocal() as db:
-        annotator = TextAnnotator.with_defaults(db)
+        annotator = TextAnnotator.with_defaults(db, args.kind)
         if args.story_id is not None:
             try:
                 report = AnnotationReport([annotator.annotate_story(args.story_id, args.dry_run)])

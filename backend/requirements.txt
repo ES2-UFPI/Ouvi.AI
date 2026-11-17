@@ -8,6 +8,7 @@ pydantic[email]
 python-jose[cryptography]
 passlib[argon2]
 boto3
+httpx  # chamadas HTTP aos fornecedores externos (TTS do Azure)
 spacy>=3.8,<3.9
 # preshed 3.0.14 quebra o carregamento do modelo (OverflowError no tokenizador); a 3.0.9 foi testada e funciona
 preshed==3.0.9

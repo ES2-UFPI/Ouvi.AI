@@ -10,6 +10,8 @@ from typing import Protocol
 from app.modules.stories.nlp.base import DetectedSpan
 
 EQUIVALENTS_FILE = Path(__file__).parent / "data" / "pt_equivalents.json"
+# Palavras difíceis (Cenário B): mesmo formato, mas o lema é uma palavra só
+WORDS_FILE = Path(__file__).parent / "data" / "pt_words.json"
 
 # Marcador de "algumas palavras aqui" nas formas do dicionário: "deixou ... para trás"
 # casa com "deixou a tartaruga para trás". Vale de 1 a 4 palavras no lugar das reticências.
@@ -44,6 +46,33 @@ class EquivalentsFileError(ValueError):
 @lru_cache
 def load_pt_equivalents(path: Path = EQUIVALENTS_FILE) -> dict[str, tuple[str, ...]]:
     """Lê `pt_equivalents.json`: cada phrasal verb (lema) aponta para as formas em português."""
+    return _read_equivalents(path, words=2)
+
+
+@lru_cache
+def load_pt_words(path: Path = WORDS_FILE) -> dict[str, tuple[str, ...]]:
+    """Lê `pt_words.json`: cada palavra difícil (lema de UMA palavra) aponta para as formas em português."""
+    return _read_equivalents(path, words=1)
+
+
+@lru_cache
+def load_all_equivalents(
+    phrasal_path: Path = EQUIVALENTS_FILE, words_path: Path = WORDS_FILE
+) -> dict[str, tuple[str, ...]]:
+    """Junta os dois dicionários (phrasal verbs e palavras difíceis). Uma chave repetida nos dois é erro:
+    o alinhador procura pelo lema, e não saberia qual das listas de formas usar."""
+    phrasal = load_pt_equivalents(phrasal_path)
+    words = load_pt_words(words_path)
+    collisions = sorted(set(phrasal) & set(words))
+    if collisions:
+        raise EquivalentsFileError(
+            "\n".join(f"- {lemma!r}: aparece em pt_equivalents.json e em pt_words.json" for lemma in collisions)
+        )
+    return {**phrasal, **words}
+
+
+def _read_equivalents(path: Path, words: int) -> dict[str, tuple[str, ...]]:
+    """Lê e valida um arquivo {lema: [formas]}. Junta todos os problemas numa única mensagem."""
     raw = json.loads(path.read_text(encoding="utf-8"))
     problems: list[str] = []
     result: dict[str, tuple[str, ...]] = {}
@@ -51,9 +80,10 @@ def load_pt_equivalents(path: Path = EQUIVALENTS_FILE) -> dict[str, tuple[str, .
     if not isinstance(raw, dict):
         raise EquivalentsFileError("o JSON deve ser um objeto {lema: [formas]}")
 
+    shape = "'verbo partícula'" if words == 2 else "uma única palavra"
     for lemma, forms in raw.items():
-        if lemma != lemma.lower().strip() or len(lemma.split(" ")) != 2:
-            problems.append(f"{lemma!r}: o lema deve ter a forma 'verbo partícula', em minúsculas")
+        if lemma != lemma.lower().strip() or len(lemma.split(" ")) != words:
+            problems.append(f"{lemma!r}: o lema deve ter a forma {shape}, em minúsculas")
         if not isinstance(forms, list) or not forms:
             problems.append(f"{lemma!r}: precisa de uma lista não vazia de formas em português")
             continue
@@ -121,7 +151,7 @@ class DictionaryAligner:
     name = "dictionary"
 
     def __init__(self, equivalents: dict[str, Sequence[str]] | None = None) -> None:
-        source = equivalents if equivalents is not None else load_pt_equivalents()
+        source = equivalents if equivalents is not None else load_all_equivalents()
         self._patterns = {lemma: [_pattern_for(form) for form in forms] for lemma, forms in source.items()}
 
     @property
