@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { RegisterForm } from './RegisterForm'
+import { LoginForm } from './LoginForm'
 import * as authApi from '../api'
 
 vi.mock('../api')
@@ -62,6 +63,22 @@ describe('RegisterForm', () => {
 
     expect(await screen.findByText('Tela de login')).toBeInTheDocument()
     expect(authApi.register).toHaveBeenCalledWith({ name: 'Ana', email: 'ana@teste.com', password: 'Senha1234' })
+  })
+
+  it('depois do cadastro, o login avisa que a conta foi criada e já traz o e-mail', async () => {
+    vi.mocked(authApi.register).mockResolvedValue({})
+    render(
+      <MemoryRouter initialEntries={['/cadastro']}>
+        <Routes>
+          <Route path="/cadastro" element={<RegisterForm />} />
+          <Route path="/login" element={<LoginForm />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await preencherEEnviar()
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Conta criada!')
+    expect(screen.getByLabelText('E-mail')).toHaveValue('ana@teste.com')
   })
 
   it('e-mail já cadastrado (409) mostra a mensagem específica', async () => {

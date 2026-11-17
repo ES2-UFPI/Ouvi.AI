@@ -19,7 +19,8 @@ export function RegisterForm() {
     setLoading(true)
     try {
       await register({ name, email, password })
-      navigate('/login')
+      // O login avisa que a conta foi criada e já traz o e-mail preenchido
+      navigate('/login', { state: { registered: true, email } })
     } catch (err) {
       const status = axios.isAxiosError(err) ? err.response?.status : undefined
       if (status === 409) {
