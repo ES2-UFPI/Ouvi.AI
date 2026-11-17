@@ -206,12 +206,8 @@ def test_tts_error_nao_tenta_de_novo_por_padrao():
 
 # ---------- fábrica por configuração ----------
 
-def test_o_valor_padrao_e_o_provedor_falso(monkeypatch):
+def test_o_valor_padrao_e_o_provedor_falso():
     """Um clone novo, sem chave de API, sobe com o provedor falso."""
-    # O docker compose também injeta o backend/.env nas variáveis de ambiente do container: sem apagá-las,
-    # quem configurou o Azure no .env quebra o teste
-    for nome in ("TTS_PROVIDER", "TTS_API_KEY", "TTS_VOICE_ID"):
-        monkeypatch.delenv(nome, raising=False)
     settings = Settings(_env_file=None)  # sem ler o backend/.env: quem tem chave nele não quebra o teste
     assert settings.tts_provider == "fake"
     assert settings.tts_api_key == ""
