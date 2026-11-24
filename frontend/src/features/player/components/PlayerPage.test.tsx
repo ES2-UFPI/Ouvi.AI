@@ -348,7 +348,8 @@ describe('PlayerPage', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Continuar' }))
     expect(await screen.findByText('Frase 3 de 3')).toBeInTheDocument()
-    expect(audioDe(container)).toHaveAttribute('src', URL_UNICA)
+    // A URL do áudio chega depois do texto (é assíncrona): espera por ela, senão o teste depende da velocidade da máquina
+    await vi.waitFor(() => expect(audioDe(container)).toHaveAttribute('src', URL_UNICA))
     await act(async () => {})
     Object.defineProperty(audioDe(container), 'duration', { configurable: true, value: 3 })
     fireEvent(audioDe(container), new Event('loadedmetadata'))
@@ -443,8 +444,9 @@ describe('PlayerPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Continuar' }))
 
     expect(await screen.findByText('Frase 3 de 3')).toBeInTheDocument()
+    // A URL da frase chega depois do texto (é assíncrona): espera por ela, senão o teste depende da velocidade da máquina
+    await vi.waitFor(() => expect(audioDe(container)).toHaveAttribute('src', urlDaFrase(3)))
     const audio = audioDe(container)
-    expect(audio).toHaveAttribute('src', urlDaFrase(3))
     expect(audio).toHaveAttribute('autoplay')
     expect(progressApi.deleteProgress).not.toHaveBeenCalled()
 

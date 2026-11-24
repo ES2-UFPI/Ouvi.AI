@@ -32,6 +32,17 @@ function renderLogin(from?: string) {
   )
 }
 
+function renderLoginVindoDoCadastro(email: string) {
+  return render(
+    <MemoryRouter initialEntries={[{ pathname: '/login', state: { registered: true, email } }]}>
+      <Routes>
+        <Route path="/login" element={<LoginForm />} />
+        <Route path="/" element={<div>Tela inicial</div>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
 async function preencherEEnviar(email = 'ana@teste.com', senha = 'Senha1234') {
   const user = userEvent.setup()
   await user.type(screen.getByLabelText('E-mail'), email)
@@ -91,5 +102,28 @@ describe('LoginForm', () => {
     renderLogin()
     await preencherEEnviar()
     expect(await screen.findByRole('button', { name: 'Entrando...' })).toBeDisabled()
+  })
+
+  it('vindo do cadastro, avisa que a conta foi criada e já traz o e-mail preenchido', () => {
+    renderLoginVindoDoCadastro('ana@teste.com')
+    expect(screen.getByRole('status')).toHaveTextContent('Conta criada! Agora é só entrar com a sua senha.')
+    expect(screen.getByLabelText('E-mail')).toHaveValue('ana@teste.com')
+    expect(screen.getByLabelText('Senha')).toHaveFocus()
+  })
+
+  it('sem vir do cadastro, não mostra o aviso de conta criada', () => {
+    renderLogin()
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.getByLabelText('E-mail')).toHaveValue('')
+  })
+
+  it('o aviso de conta criada dá lugar à mensagem de erro', async () => {
+    vi.mocked(authApi.login).mockRejectedValue(erroHttp(401))
+    renderLoginVindoDoCadastro('ana@teste.com')
+    await userEvent.setup().type(screen.getByLabelText('Senha'), 'errada123')
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Entrar' }))
+
+    expect(await screen.findByText('E-mail ou senha incorretos.')).toBeInTheDocument()
+    expect(screen.queryByRole('status')).toBeNull()
   })
 })

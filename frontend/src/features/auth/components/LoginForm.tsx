@@ -10,7 +10,9 @@ export function LoginForm() {
   const navigate = useNavigate()
   const location = useLocation()
   const setTokens = useAuthStore((s) => s.setTokens)
-  const [email, setEmail] = useState('')
+  // Vindo do cadastro, o estado traz `registered` e o e-mail; vindo de uma rota protegida, traz `from`
+  const state = location.state as { from?: string; registered?: boolean; email?: string } | null
+  const [email, setEmail] = useState(state?.email ?? '')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -22,7 +24,7 @@ export function LoginForm() {
     try {
       const data = await login({ email, password })
       setTokens(data.access_token, data.refresh_token)
-      const redirectTo = (location.state as { from?: string })?.from ?? '/'
+      const redirectTo = state?.from ?? '/'
       navigate(redirectTo, { replace: true })
     } catch (err) {
       // 401 = credencial errada; qualquer outra falha (rede, API fora do ar) tem mensagem própria
@@ -58,12 +60,18 @@ export function LoginForm() {
           label="Senha"
           type="password"
           autoComplete="current-password"
+          autoFocus={Boolean(state?.registered)}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
         />
 
         {error && <p className="text-sm text-accent-pt mb-4">{error}</p>}
+        {state?.registered && !error && (
+          <p role="status" className="text-sm text-accent-en mb-4">
+            Conta criada! Agora é só entrar com a sua senha.
+          </p>
+        )}
 
         <button
           type="submit"

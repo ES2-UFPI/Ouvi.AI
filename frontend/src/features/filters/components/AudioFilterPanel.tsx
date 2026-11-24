@@ -86,9 +86,8 @@ interface ChoiceProps {
 function Choice({ type, name, checked, onChange, label, accent, badge, center }: ChoiceProps) {
   return (
     <label
-      className={`flex items-center gap-2.5 rounded-xl border px-3.5 py-3 text-sm cursor-pointer transition-colors focus-within:ring-2 focus-within:ring-accent-en ${
-        center ? 'justify-center' : ''
-      } ${checked ? 'text-text-primary' : 'text-text-muted hover:border-text-muted'}`}
+      className={`flex items-center gap-2.5 rounded-xl border px-3.5 py-3 text-sm cursor-pointer transition-colors focus-within:ring-2 focus-within:ring-accent-en ${center ? 'justify-center' : ''
+        } ${checked ? 'text-text-primary' : 'text-text-muted hover:border-text-muted'}`}
       style={{
         borderColor: checked ? accent : 'var(--color-border-subtle)',
         backgroundColor: checked ? `color-mix(in srgb, ${accent} 14%, transparent)` : 'transparent',
@@ -138,6 +137,34 @@ function examples(preview: StoryPreview) {
   return { first: withSwaps[0], last: withSwaps[withSwaps.length - 1] }
 }
 
+// A tela mostra só os tipos de trecho que o cenário do idioma base escolhido aceita, e só envia os tipos que o cenário aceita
+function resolveFilterState(
+  scenarios: Scenario[],
+  baseLanguage: BaseLanguage | null,
+  segmentTypes: SegmentType[],
+) {
+  const languageScenarios = scenarios.filter((s) => s.base_language === baseLanguage)
+  const allowedTypes = unique(languageScenarios.flatMap((s) => s.segment_types))
+  const validTypes = segmentTypes.filter((t) => allowedTypes.includes(t))
+  const scenario = scenarioFor(languageScenarios, validTypes)
+  const wordLevels = scenario
+    ? scenario.word_levels
+    : unique(languageScenarios.flatMap((s) => s.word_levels))
+  const needsLevel = wordLevels.length > 0
+  const progression = scenario?.progressions[0] ?? 'fixed'
+
+  return {
+    languageScenarios,
+    allowedTypes,
+    validTypes,
+    scenario,
+    wordLevels,
+    needsLevel,
+    progression,
+    increasing: progression === 'increasing',
+  }
+}
+
 // A frase com as palavras trocadas em destaque e o que é falado em inglês entre parênteses
 function ExampleSentence({ segment }: { segment: StoryPreview['segments'][number] }) {
   const parts: React.ReactNode[] = []
@@ -178,25 +205,23 @@ export function AudioFilterPanel() {
   const saved = filters.data?.find((f) => f.story_id === storyId)
   const savedForm: FormValues = saved
     ? {
-        baseLanguage: saved.rules.base_language,
-        segmentTypes: saved.rules.segment_types,
-        density: saved.rules.density,
-        wordLevel: saved.rules.word_level ?? null,
-      }
+      baseLanguage: saved.rules.base_language,
+      segmentTypes: saved.rules.segment_types,
+      density: saved.rules.density,
+      wordLevel: saved.rules.word_level ?? null,
+    }
     : EMPTY_FORM
   const { baseLanguage, segmentTypes, density, wordLevel } = draft ?? savedForm
-  const languageScenarios = scenarios.filter((s) => s.base_language === baseLanguage)
-  // Só os tipos dos cenários do idioma base escolhido
-  const allowedTypes = unique(languageScenarios.flatMap((s) => s.segment_types))
-  // Um filtro antigo pode ter um tipo que o cenário não aceita mais: esse tipo não conta nem é enviado
-  const validTypes = segmentTypes.filter((t) => allowedTypes.includes(t))
-  const scenario = scenarioFor(languageScenarios, validTypes)
-  // Antes de escolher o tipo, valem os níveis dos cenários do idioma (o inglês já mostra o campo de nível)
-  const wordLevels = scenario ? scenario.word_levels : unique(languageScenarios.flatMap((s) => s.word_levels))
-  const needsLevel = wordLevels.length > 0
-  // A progressão vem do cenário: o Cenário C é sempre crescente, e nele a densidade é a FINAL
-  const progression = scenario?.progressions[0] ?? 'fixed'
-  const increasing = progression === 'increasing'
+  const {
+    languageScenarios,
+    allowedTypes,
+    validTypes,
+    scenario,
+    wordLevels,
+    needsLevel,
+    progression,
+    increasing,
+  } = resolveFilterState(scenarios, baseLanguage, segmentTypes)
 
   function edit(patch: Partial<FormValues>) {
     setDraft({ baseLanguage, segmentTypes, density, wordLevel, ...patch })
