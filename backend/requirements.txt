@@ -1,4 +1,5 @@
 fastapi
+python-multipart  # upload de arquivo (US18: enviar a própria história)
 uvicorn[standard]
 sqlalchemy
 alembic

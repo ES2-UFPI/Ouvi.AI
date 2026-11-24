@@ -18,10 +18,13 @@ class StoryService:
     def list_stories(self) -> list[Story]:
         return self.stories.list_all()
 
-    def list_stories_with_counts(self) -> list[tuple[Story, int]]:
-        """Cada história com o número de frases (uma consulta a mais, não uma por história)."""
+    def list_stories_with_counts(self, user_id: int | None = None) -> list[tuple[Story, int]]:
+        """Cada história com o número de frases (uma consulta a mais, não uma por história).
+
+        Com `user_id`, só o catálogo e as histórias enviadas por esse usuário (US18)."""
         counts = self.segments.count_by_stories()
-        return [(story, counts.get(story.id, 0)) for story in self.stories.list_all()]
+        stories = self.stories.list_all() if user_id is None else self.stories.list_visible(user_id)
+        return [(story, counts.get(story.id, 0)) for story in stories]
 
     def get_segments(
         self, story_id: int, kind: str | None = None, aligned_only: bool = False

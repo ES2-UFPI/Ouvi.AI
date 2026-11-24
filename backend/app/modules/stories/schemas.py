@@ -13,6 +13,14 @@ class StoryRead(BaseModel):
     description: str | None
     # Número de frases: o front mostra "frase 7 de 12" sem precisar baixar o texto de cada história
     segment_count: int = 0
+    # História enviada pelo próprio usuário (US18), e não do catálogo
+    is_mine: bool = False
+
+
+class StoryImportRead(BaseModel):
+    story: StoryRead
+    annotations: int
+    aligned: int
 
 
 class StoryHeader(BaseModel):
