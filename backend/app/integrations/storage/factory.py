@@ -21,6 +21,14 @@ def _build_s3(settings: Settings) -> ObjectStorage:
     )
 
 
+def _build_database(settings: Settings) -> ObjectStorage:
+    # Import tardio: a sessão do banco só é necessária quando este armazenamento é o escolhido
+    from app.core.database import SessionLocal
+    from app.integrations.storage.database import DatabaseStorage
+
+    return DatabaseStorage(SessionLocal, bucket=settings.storage_bucket)
+
+
 def _build_memory(settings: Settings) -> ObjectStorage:
     return InMemoryStorage(bucket=settings.storage_bucket)
 
@@ -29,6 +37,7 @@ def _build_memory(settings: Settings) -> ObjectStorage:
 _BUILDERS: dict[str, Callable[[Settings], ObjectStorage]] = {
     "s3": _build_s3,
     "memory": _build_memory,
+    "database": _build_database,
 }
 
 

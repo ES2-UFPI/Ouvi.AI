@@ -40,9 +40,24 @@ def _s3_storage() -> ObjectStorage:
     return storage
 
 
-@pytest.fixture(params=["memory", "s3"])
+def _database_storage() -> ObjectStorage:
+    """Armazenamento no Postgres (deploy sem S3). Precisa do banco migrado; sem ele, o teste é pulado."""
+    from app.core.database import SessionLocal
+    from app.integrations.storage.database import DatabaseStorage
+
+    storage = DatabaseStorage(SessionLocal)
+    try:
+        storage.delete("tests/ping")
+    except StorageError:
+        pytest.skip("Postgres indisponível ou sem a tabela storage_objects (rode: alembic upgrade head)")
+    return storage
+
+
+@pytest.fixture(params=["memory", "s3", "database"])
 def storage(request):
-    return InMemoryStorage() if request.param == "memory" else _s3_storage()
+    if request.param == "memory":
+        return InMemoryStorage()
+    return _s3_storage() if request.param == "s3" else _database_storage()
 
 
 @pytest.fixture
@@ -159,6 +174,9 @@ def test_factory_chooses_by_settings():
     from app.integrations.storage.s3 import S3Storage
 
     assert isinstance(create_storage(Settings(storage_backend="s3")), S3Storage)
+    from app.integrations.storage.database import DatabaseStorage
+
+    assert isinstance(create_storage(Settings(storage_backend="database")), DatabaseStorage)
 
 
 def test_factory_rejects_unknown_backend():

@@ -14,6 +14,7 @@ def _todos_os_modelos():
     Sem isso, uma tabela de um módulo não importado pareceria sobrando no banco.
     """
     from app.core.database import Base
+    from app.integrations.storage import database as _armazenamento  # noqa: F401 (tabela storage_objects)
     from app.modules.audio import models as _audio  # noqa: F401
     from app.modules.filters import models as _filtros  # noqa: F401
     from app.modules.progress import models as _progresso  # noqa: F401
