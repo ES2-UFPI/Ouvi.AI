@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Home } from 'lucide-react'
 import { getFilter } from '../../filters/api'
+import type { FilterRules } from '../../filters/api'
 import {
   DENSITY_LABELS,
   LANGUAGE_LABELS,
@@ -28,6 +29,28 @@ export function PlayerPage() {
   const [searchParams] = useSearchParams()
   // Outra história ou outro filtro: recomeça do zero (polling, frase atual e URLs)
   return <PlayerPageContent key={`${storyId}-${searchParams.get('filter')}`} />
+}
+
+function buildFilterChips(rules: FilterRules | undefined, increasing: boolean): string[] {
+  if (!rules) return []
+  return [
+    `Base: ${LANGUAGE_LABELS[rules.base_language]}`,
+    ...rules.segment_types.map((t) => SEGMENT_LABELS[t]),
+    ...(rules.word_level ? [`Nível ${WORD_LEVEL_LABELS[rules.word_level].toLowerCase()}`] : []),
+    `Densidade ${increasing ? 'final ' : ''}${DENSITY_LABELS[rules.density].toLowerCase()}`,
+    ...(increasing ? [`Progressão ${PROGRESSION_LABELS.increasing.toLowerCase()}`] : []),
+  ]
+}
+
+function getAudioError(
+  validStory: boolean,
+  error: string | null,
+  totalSegments: number | undefined,
+): string | null {
+  if (!validStory) return 'História não encontrada.'
+  if (error) return error
+  if (totalSegments === 0) return 'Esta história ainda não tem frases para gerar o áudio.'
+  return null
 }
 
 function PlayerPageContent() {
@@ -175,21 +198,8 @@ function PlayerPageContent() {
     retry: false,
   })
 
-  // Resumo do filtro escolhido, mostrado como etiquetas no topo do player
-  const chips = rules
-    ? [
-      `Base: ${LANGUAGE_LABELS[rules.base_language]}`,
-      ...rules.segment_types.map((t) => SEGMENT_LABELS[t]),
-      ...(rules.word_level ? [`Nível ${WORD_LEVEL_LABELS[rules.word_level].toLowerCase()}`] : []),
-      `Densidade ${increasing ? 'final ' : ''}${DENSITY_LABELS[rules.density].toLowerCase()}`,
-      ...(increasing ? [`Progressão ${PROGRESSION_LABELS.increasing.toLowerCase()}`] : []),
-    ]
-    : []
-
-  let audioError: string | null = null
-  if (!validStory) audioError = 'História não encontrada.'
-  else if (audio.error) audioError = audio.error
-  else if (audio.status?.total === 0) audioError = 'Esta história ainda não tem frases para gerar o áudio.'
+  const chips = useMemo(() => buildFilterChips(rules, Boolean(increasing)), [rules, increasing])
+  const audioError = getAudioError(validStory, audio.error, audio.status?.total)
 
   const status = audio.status
   // O player aparece assim que existe alguma frase pronta (ou já pulada): não espera a história toda
