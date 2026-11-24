@@ -27,6 +27,7 @@ def test_lista_de_historias_traz_id_titulo_e_descricao(api, make_user, db_sessio
     achada = next(h for h in lista if h["id"] == historia.id)
     assert achada == {
         "id": historia.id, "title": "História de teste XYZ", "description": "Uma descrição", "segment_count": 0,
+        "is_mine": False,
     }
 
 

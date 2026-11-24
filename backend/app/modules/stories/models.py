@@ -37,6 +37,10 @@ class Story(Base):
     description: Mapped[str | None] = mapped_column(Text)
     # Idioma original do texto ("en" ou "pt"). As histórias já cadastradas são em inglês.
     language: Mapped[str] = mapped_column(String(2), server_default="en")
+    # Dono da história enviada pelo usuário (US18). Nulo = história do catálogo, visível para todos
+    owner_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, default=None
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

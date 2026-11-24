@@ -24,13 +24,24 @@ class StoryRepository:
     def get_by_id(self, story_id: int) -> Story | None:
         return self.db.get(Story, story_id)
 
+    def list_visible(self, user_id: int) -> list[Story]:
+        """Histórias do catálogo e as enviadas por este usuário (as de outros usuários ficam de fora)."""
+        stmt = select(Story).where((Story.owner_id.is_(None)) | (Story.owner_id == user_id)).order_by(Story.id)
+        return list(self.db.scalars(stmt))
+
     def get_by_title(self, title: str) -> Story | None:
-        return self.db.scalar(select(Story).where(Story.title == title))
+        # Só o catálogo: uma história enviada com o mesmo título nunca é confundida com a do seed
+        return self.db.scalar(select(Story).where(Story.title == title, Story.owner_id.is_(None)))
 
     def create(
-        self, title: str, description: str | None, language: str, commit: bool = True
+        self,
+        title: str,
+        description: str | None,
+        language: str,
+        commit: bool = True,
+        owner_id: int | None = None,
     ) -> Story:
-        story = Story(title=title, description=description, language=language)
+        story = Story(title=title, description=description, language=language, owner_id=owner_id)
         self.db.add(story)
         self.db.commit() if commit else self.db.flush()
         if commit:
