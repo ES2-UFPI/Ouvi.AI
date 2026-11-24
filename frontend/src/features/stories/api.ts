@@ -7,6 +7,8 @@ export interface Story {
   description: string | null
   // Número de frases da história
   segment_count: number
+  // História enviada pelo próprio usuário (US18)
+  is_mine?: boolean
 }
 
 export interface StoryAnnotation {
@@ -37,6 +39,21 @@ export interface StorySegments {
 
 export async function listStories() {
   const { data } = await apiClient.get<Story[]>('/stories')
+  return data
+}
+
+export interface StoryImport {
+  story: Story
+  annotations: number
+  aligned: number
+}
+
+// Envia um texto do usuário (US18): .txt bilíngue ou .json no formato do seed
+export async function importStory(file: File, title?: string) {
+  const form = new FormData()
+  form.append('file', file)
+  if (title?.trim()) form.append('title', title.trim())
+  const { data } = await apiClient.post<StoryImport>('/stories/import', form)
   return data
 }
 

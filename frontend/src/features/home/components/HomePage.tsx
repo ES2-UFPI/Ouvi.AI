@@ -1,9 +1,11 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Headphones, LogOut } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
+import { Headphones, LogOut, Upload } from 'lucide-react'
+import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../auth/store'
 import { listRecentProgress, type Progress } from '../../progress/api'
-import { listStories, type Story } from '../../stories/api'
+import { importStory, listStories, type Story, type StoryImport } from '../../stories/api'
 import { getMe } from '../../users/api'
 import { PageLayout } from '../../../shared/components/PageLayout'
 
@@ -74,6 +76,14 @@ function ContinueCard({ progress, story }: { progress: Progress; story: Story })
 function StoryCard({ story }: { story: Story }) {
   return (
     <li className={`${CARD} flex flex-col`}>
+      {story.is_mine && (
+        <span
+          className="self-start text-[11px] uppercase tracking-wider rounded-full px-2 py-0.5 mb-2"
+          style={{ backgroundColor: 'var(--color-accent-en)', color: 'var(--color-bg-deep)' }}
+        >
+          Sua história
+        </span>
+      )}
       <h3 className="font-display text-lg text-text-primary leading-tight">{story.title}</h3>
       {story.description && <p className="text-sm text-text-muted mt-1.5">{story.description}</p>}
       <p className="text-xs text-text-muted mt-3 mb-4">
@@ -89,6 +99,97 @@ function StoryCard({ story }: { story: Story }) {
         Ouvir
       </Link>
     </li>
+  )
+}
+
+function importErrorMessage(error: unknown) {
+  if (isAxiosError(error) && typeof error.response?.data?.detail === 'string') return error.response.data.detail
+  return 'Não foi possível enviar o arquivo. Tente de novo.'
+}
+
+// US18: o usuário envia o próprio texto (inglês e português, frase a frase) para ouvir com os filtros
+function UploadStoryCard() {
+  const queryClient = useQueryClient()
+  const [file, setFile] = useState<File | null>(null)
+  const [title, setTitle] = useState('')
+  const [result, setResult] = useState<StoryImport | null>(null)
+  const [inputKey, setInputKey] = useState(0) // trocar a key limpa o campo de arquivo depois do envio
+  const upload = useMutation({
+    mutationFn: () => importStory(file!, title),
+    onSuccess: (data) => {
+      setResult(data)
+      setFile(null)
+      setTitle('')
+      setInputKey((k) => k + 1)
+      queryClient.invalidateQueries({ queryKey: ['stories'] })
+    },
+  })
+
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    setResult(null)
+    if (file) upload.mutate()
+  }
+
+  return (
+    <section aria-labelledby="upload-title" className="mb-10">
+      <h2 id="upload-title" className="text-sm uppercase tracking-wider text-text-muted mb-3">
+        Enviar sua história
+      </h2>
+      <form onSubmit={handleSubmit} className={`${CARD} grid gap-3`}>
+        <p className="text-sm text-text-muted">
+          Envie um <strong>.txt</strong> com cada frase em inglês seguida da tradução em português (linha por linha) ou
+          um <strong>.json</strong> no formato das histórias. Linhas <code>= termo -&gt; tradução</code> ajudam a
+          trocar as palavras.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] items-end">
+          <label className="text-sm text-text-muted grid gap-1">
+            Arquivo
+            <input
+              key={inputKey}
+              type="file"
+              accept=".txt,.json"
+              aria-label="Arquivo da história"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="text-sm text-text-primary file:mr-3 file:rounded-lg file:border-0 file:px-3 file:py-1.5 file:bg-bg-deep file:text-text-primary"
+            />
+          </label>
+          <label className="text-sm text-text-muted grid gap-1">
+            Título (opcional)
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Usa o do arquivo"
+              className="rounded-lg bg-bg-deep border border-border-subtle px-3 py-1.5 text-text-primary"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={!file || upload.isPending}
+            className={`${PRIMARY_LINK} disabled:opacity-50`}
+            style={{ backgroundColor: 'var(--color-accent-en)' }}
+          >
+            <Upload size={16} aria-hidden="true" />
+            {upload.isPending ? 'Enviando e anotando...' : 'Enviar'}
+          </button>
+        </div>
+        {upload.isError && (
+          <p role="alert" className="text-sm" style={{ color: 'var(--color-accent-pt)' }}>
+            {importErrorMessage(upload.error)}
+          </p>
+        )}
+        {result && (
+          <p role="status" className="text-sm text-text-primary">
+            &ldquo;{result.story.title}&rdquo; criada: {result.story.segment_count} frases, {result.annotations} trechos
+            encontrados ({result.aligned} com tradução).{' '}
+            <Link to={`/filter?story=${result.story.id}`} className="underline">
+              Ouvir agora
+            </Link>
+          </p>
+        )}
+      </form>
+    </section>
   )
 }
 
@@ -157,6 +258,8 @@ export function HomePage() {
           </ul>
         )}
       </section>
+
+      <UploadStoryCard />
 
       <section aria-labelledby="stories-title">
         <h2 id="stories-title" className="text-sm uppercase tracking-wider text-text-muted mb-3">
