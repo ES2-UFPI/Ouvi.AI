@@ -3,7 +3,8 @@
 Gerar o áudio leva de segundos a minutos, então o POST responde `202` na hora e a Facade roda em segundo
 plano (BackgroundTasks), com uma sessão de banco própria. O front acompanha pelo GET de status (polling).
 """
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any
@@ -89,6 +90,25 @@ def _call(action: Callable[[], Any]) -> Any:
             status_code=422,
             detail=f"As regras do filtro não podem ser usadas: {exc}",
         )
+
+
+@contextmanager
+def _storage_errors() -> Iterator[None]:
+    """Traduz as falhas do armazenamento em respostas HTTP (as mesmas para as rotas de áudio)."""
+    try:
+        yield
+    except StorageObjectNotFound:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Áudio não encontrado")
+    except StorageError:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Armazenamento indisponível")
+
+
+def _signed_stream_url(request: Request, audio: AudioService, storage_key: str) -> tuple[str, datetime]:
+    """URL assinada de `GET /audio/stream` para o objeto, e quando ela expira."""
+    with _storage_errors():
+        params = audio.sign(storage_key)
+    url = request.url_for("stream_audio").include_query_params(**params)
+    return str(url), datetime.fromtimestamp(int(params["expires"]), tz=timezone.utc)
 
 
 def _generate_in_background(
@@ -197,17 +217,10 @@ def get_segment_audio(
             )
 
     asset = _call(ready_asset)
-    try:
-        params = audio.sign(asset.storage_key)
-    except StorageObjectNotFound:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Áudio não encontrado")
-    except StorageError:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Armazenamento indisponível")
-
-    url = request.url_for("stream_audio").include_query_params(**params)
+    url, expires_at = _signed_stream_url(request, audio, asset.storage_key)
     return SegmentAudioRead(
-        url=str(url),
-        expires_at=datetime.fromtimestamp(int(params["expires"]), tz=timezone.utc),
+        url=url,
+        expires_at=expires_at,
         segment_id=segment_id,
         duration_ms=asset.duration_ms,
         format=asset.format,
@@ -247,22 +260,17 @@ def get_story_full_audio(
             )
 
     parts = _call(ready_parts)
-    try:
-        track = FullTrackBuilder(storage).build(parts.assets, parts.positions)
-        params = audio.sign(track.storage_key)
-    except UnsupportedAudioFormat:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Não foi possível juntar o áudio da história"
-        )
-    except StorageObjectNotFound:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Áudio não encontrado")
-    except StorageError:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Armazenamento indisponível")
-
-    url = request.url_for("stream_audio").include_query_params(**params)
+    with _storage_errors():
+        try:
+            track = FullTrackBuilder(storage).build(parts.assets, parts.positions)
+        except UnsupportedAudioFormat:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Não foi possível juntar o áudio da história"
+            )
+    url, expires_at = _signed_stream_url(request, audio, track.storage_key)
     return FullAudioRead(
-        url=str(url),
-        expires_at=datetime.fromtimestamp(int(params["expires"]), tz=timezone.utc),
+        url=url,
+        expires_at=expires_at,
         duration_ms=track.duration_ms,
         format=track.format,
         segments=[TrackSegmentRead(**vars(s)) for s in track.segments],

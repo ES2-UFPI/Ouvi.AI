@@ -122,6 +122,11 @@ class GenerationRequest:
     voice_id: str  # a voz escolhida para o idioma base do filtro
 
 
+def _is_finished(asset: AudioAsset | None) -> bool:
+    """A frase terminou de ser gerada (pronta ou falha)? Sem áudio, pendente ou em geração: ainda não."""
+    return asset is not None and asset.status not in (STATUS_PENDING, STATUS_GENERATING)
+
+
 class AudioGenerationService:
     def __init__(
         self,
@@ -177,7 +182,7 @@ class AudioGenerationService:
         asset = self.assets.get_by_segment(
             segment_id, rules_hash=compute_rules_hash(rules), voice_id=self.voice_for(rules)
         )
-        if asset is None or asset.status in (STATUS_PENDING, STATUS_GENERATING):
+        if not _is_finished(asset):
             raise SegmentAudioNotReadyError()
         if asset.status == STATUS_FAILED:
             raise SegmentAudioFailedError(asset.error or "")
@@ -190,17 +195,12 @@ class AudioGenerationService:
         listening_filter = self._filter_for_story(user, story_id, filter_id)
         rules = self._rules(listening_filter)
         _, segments = self.stories.get_segments(story_id)
-        by_segment = {
-            a.segment_id: a
-            for a in self.assets.list_by_story(
-                story_id, rules_hash=compute_rules_hash(rules), voice_id=self.voice_for(rules)
-            )
-        }
+        by_segment = self._assets_by_segment(story_id, rules)
         ready: list[AudioAsset] = []
         skipped: list[int] = []
         for segment in segments:
             asset = by_segment.get(segment.id)
-            if asset is None or asset.status in (STATUS_PENDING, STATUS_GENERATING):
+            if not _is_finished(asset):
                 raise StoryAudioNotReadyError()
             if asset.status == STATUS_FAILED:
                 skipped.append(segment.id)
@@ -230,10 +230,28 @@ class AudioGenerationService:
     def _job_key(self, story_id: int, rules: dict[str, Any]) -> tuple[int, str, str]:
         return (story_id, compute_rules_hash(rules), self.voice_for(rules))
 
+    def _assets_by_segment(self, story_id: int, rules: dict[str, Any]) -> dict[int, AudioAsset]:
+        """Áudios da história com as regras e a voz do filtro, por frase."""
+        _, rules_hash, voice_id = self._job_key(story_id, rules)
+        return {a.segment_id: a for a in self.assets.list_by_story(story_id, rules_hash=rules_hash, voice_id=voice_id)}
+
+    def _overall_state(self, key: tuple[int, str, str], items: list[SegmentStatus]) -> str:
+        """Estado geral da geração a partir do estado de cada frase e de haver uma tarefa em andamento."""
+        ready = sum(1 for i in items if i.status == STATUS_READY)
+        failed = sum(1 for i in items if i.status == STATUS_FAILED)
+        generating = any(i.status == STATUS_GENERATING for i in items)
+        if ready == len(items):
+            return STATE_READY
+        if self.jobs.is_running(key) or generating:
+            return STATE_GENERATING
+        if failed and ready + failed == len(items):
+            return STATE_FAILED
+        return STATE_PENDING
+
     def _status(self, story_id: int, filter_id: int, rules: dict[str, Any]) -> GenerationStatus:
         _, segments = self.stories.get_segments(story_id)
         key = self._job_key(story_id, rules)
-        by_segment = {a.segment_id: a for a in self.assets.list_by_story(story_id, rules_hash=key[1], voice_id=key[2])}
+        by_segment = self._assets_by_segment(story_id, rules)
 
         items = []
         for segment in segments:
@@ -248,22 +266,12 @@ class AudioGenerationService:
                 )
             )
 
-        counts = {s: sum(1 for i in items if i.status == s) for s in (STATUS_READY, STATUS_FAILED, STATUS_GENERATING)}
-        if counts[STATUS_READY] == len(items):
-            state = STATE_READY
-        elif self.jobs.is_running(key) or counts[STATUS_GENERATING]:
-            state = STATE_GENERATING
-        elif counts[STATUS_FAILED] and counts[STATUS_READY] + counts[STATUS_FAILED] == len(items):
-            state = STATE_FAILED
-        else:
-            state = STATE_PENDING
-
         return GenerationStatus(
             story_id=story_id,
             filter_id=filter_id,
-            state=state,
+            state=self._overall_state(key, items),
             total=len(items),
-            ready=counts[STATUS_READY],
-            failed=counts[STATUS_FAILED],
+            ready=sum(1 for i in items if i.status == STATUS_READY),
+            failed=sum(1 for i in items if i.status == STATUS_FAILED),
             segments=items,
         )
